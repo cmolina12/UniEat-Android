@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.DemoFixture
 import co.edu.uniandes.unieat.DevDataSource
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.decision.LocationGuidance
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.MenuDish
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
@@ -114,7 +116,7 @@ private fun MenuDetailContent(
             MenuDetailUiState.Loading -> Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) {
                 CircularProgressIndicator(color = Palette.Ink)
             }
-            is MenuDetailUiState.Content -> MenuBody(state.menu, rememberServerNow(state.clockOffset))
+            is MenuDetailUiState.Content -> MenuBody(state.menu, state.location, rememberServerNow(state.clockOffset))
             is MenuDetailUiState.Gone -> StatusMessage(
                 title = state.message,
                 body = "Vuelve a la lista de menús para ver opciones vigentes.",
@@ -147,7 +149,7 @@ private fun rememberServerNow(offset: Duration): Instant {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MenuBody(menu: DailyMenu, now: Instant) {
+private fun MenuBody(menu: DailyMenu, location: LocationGuidance, now: Instant) {
     val active = menu.isActive(now)
 
     FoodArtwork(menu.establishmentName)
@@ -175,12 +177,7 @@ private fun MenuBody(menu: DailyMenu, now: Instant) {
         menu.items.forEach { DishCard(it) }
     }
 
-    // Phase 2 replaces this with the BQ-05 location card.
-    SurfaceCard(Modifier.fillMaxWidth()) {
-        Text("Ubicación", style = MaterialTheme.typography.titleMedium)
-        Text(menu.address.ifBlank { "Dirección no publicada" }, style = MaterialTheme.typography.bodyMedium)
-        if (menu.entranceDescription.isNotBlank()) Text(menu.entranceDescription, fontSize = 12.sp)
-    }
+    LocationCard(location, menu.establishmentName, now)
 
     SurfaceCard(Modifier.fillMaxWidth()) {
         Text("Medios de pago", style = MaterialTheme.typography.titleMedium)
@@ -278,10 +275,8 @@ private fun FoodArtwork(name: String) {
         Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .background(
-                Brush.linearGradient(listOf(Palette.Yellow, Palette.Coral.copy(alpha = 0.8f))),
-                RoundedCornerShape(11.dp),
-            ),
+            .clip(RoundedCornerShape(11.dp)) // keeps the decorative circle inside the banner
+            .background(Brush.linearGradient(listOf(Palette.Yellow, Palette.Coral.copy(alpha = 0.8f)))),
     ) {
         Box(
             Modifier
