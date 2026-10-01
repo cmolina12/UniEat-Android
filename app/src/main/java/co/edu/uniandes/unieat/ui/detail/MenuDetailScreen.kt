@@ -1,5 +1,16 @@
 package co.edu.uniandes.unieat.ui.detail
 
+import android.Manifest.permission.ACCESS_COARSE_LOCATION
+import android.Manifest.permission.ACCESS_FINE_LOCATION
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.PackageManager.PERMISSION_GRANTED
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,9 +86,31 @@ fun MenuDetailScreen(
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val container = (LocalContext.current.applicationContext as UniEatApplication).container
+    val distance by viewModel.distance.collectAsStateWithLifecycle()
+    val arrival by viewModel.arrival.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val container = (context.applicationContext as UniEatApplication).container
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        viewModel.onLocationPermissionResult(context.locationPermission(), context.canAskLocationAgain())
+    }
+    // Re-check on every resume: the user may have changed the permission or GPS in settings.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onLocationPermissionChecked(context.locationPermission())
+        onPauseOrDispose {}
+    }
+
     MenuDetailContent(
         state = state,
+        distance = distance,
+        arrival = arrival,
+        locationActions = LocationActions(
+            onAllow = { permissionLauncher.launch(arrayOf(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION)) },
+            onNotNow = viewModel::onLocationPromptDismissed,
+            onArrivalAnswered = viewModel::onArrivalAnswered,
+        ),
         isDemo = container.usesFakeData,
         fixtures = if (container.usesFakeData) DevDataSource.fixtures else emptyList(),
         currentMenuId = menuId,
@@ -90,6 +123,9 @@ fun MenuDetailScreen(
 @Composable
 private fun MenuDetailContent(
     state: MenuDetailUiState,
+    distance: DistanceStatus,
+    arrival: ArrivalAnswer?,
+    locationActions: LocationActions,
     isDemo: Boolean,
     fixtures: List<DemoFixture>,
     currentMenuId: String,
@@ -116,7 +152,9 @@ private fun MenuDetailContent(
             MenuDetailUiState.Loading -> Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) {
                 CircularProgressIndicator(color = Palette.Ink)
             }
-            is MenuDetailUiState.Content -> MenuBody(state.menu, state.location, rememberServerNow(state.clockOffset))
+            is MenuDetailUiState.Content -> MenuBody(
+                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions,
+            )
             is MenuDetailUiState.Gone -> StatusMessage(
                 title = state.message,
                 body = "Vuelve a la lista de menús para ver opciones vigentes.",
@@ -149,7 +187,14 @@ private fun rememberServerNow(offset: Duration): Instant {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MenuBody(menu: DailyMenu, location: LocationGuidance, now: Instant) {
+private fun MenuBody(
+    menu: DailyMenu,
+    location: LocationGuidance,
+    now: Instant,
+    distance: DistanceStatus,
+    arrival: ArrivalAnswer?,
+    locationActions: LocationActions,
+) {
     val active = menu.isActive(now)
 
     FoodArtwork(menu.establishmentName)
@@ -170,6 +215,12 @@ private fun MenuBody(menu: DailyMenu, location: LocationGuidance, now: Instant) 
         if (menu.pendingReports > 0) Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
     }
 
+    // Context-aware: only near the pin, with a precise fix (see core/decision/Proximity.kt).
+    val arrived = (distance as? DistanceStatus.Known)?.proximity?.arrived == true
+    if (arrived || arrival == ArrivalAnswer.CONFIRMED) {
+        ArrivalPrompt(menu.establishmentName, arrival, locationActions.onArrivalAnswered)
+    }
+
     WaitCard(menu, now)
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -177,7 +228,7 @@ private fun MenuBody(menu: DailyMenu, location: LocationGuidance, now: Instant) 
         menu.items.forEach { DishCard(it) }
     }
 
-    LocationCard(location, menu.establishmentName, now)
+    LocationCard(location, menu.establishmentName, now, distance, locationActions)
 
     SurfaceCard(Modifier.fillMaxWidth()) {
         Text("Medios de pago", style = MaterialTheme.typography.titleMedium)
@@ -339,6 +390,25 @@ private fun FixturePicker(fixtures: List<DemoFixture>, currentMenuId: String, on
     }
 }
 
+private fun Context.locationPermission(): LocationPermission = when {
+    ContextCompat.checkSelfPermission(this, ACCESS_FINE_LOCATION) == PERMISSION_GRANTED -> LocationPermission.PRECISE
+    ContextCompat.checkSelfPermission(this, ACCESS_COARSE_LOCATION) == PERMISSION_GRANTED -> LocationPermission.APPROXIMATE
+    else -> LocationPermission.NONE
+}
+
+/** After a denial, false means Android will not show the dialog again ("no volver a preguntar"). */
+private fun Context.canAskLocationAgain(): Boolean {
+    val activity = findActivity() ?: return false
+    return ActivityCompat.shouldShowRequestPermissionRationale(activity, ACCESS_FINE_LOCATION) ||
+        ActivityCompat.shouldShowRequestPermissionRationale(activity, ACCESS_COARSE_LOCATION)
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Preview(showBackground = true, backgroundColor = 0xFFF5F0E6, heightDp = 1400)
 @Composable
 private fun MenuDetailPreview() = UniEatTheme {
@@ -356,6 +426,9 @@ private fun MenuDetailPreview() = UniEatTheme {
             ),
             Duration.ZERO,
         ),
+        distance = DistanceStatus.PermissionNeeded,
+        arrival = null,
+        locationActions = LocationActions({}, {}, {}),
         isDemo = true,
         fixtures = emptyList(),
         currentMenuId = "preview",

@@ -4,5 +4,5 @@ import android.app.Application
 
 /** Holds the [AppContainer] for the process lifetime. */
 class UniEatApplication : Application() {
-    val container: AppContainer by lazy { AppContainer() }
+    val container: AppContainer by lazy { AppContainer(this) }
 }

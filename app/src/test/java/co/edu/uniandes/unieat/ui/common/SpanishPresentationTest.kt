@@ -22,4 +22,14 @@ class SpanishPresentationTest {
         assertEquals("hace 1 día", ago(24 * 60))
         assertEquals("hace 3 días", ago(3 * 24 * 60))
     }
+
+    @Test
+    fun distance() {
+        assertEquals("menos de 10 m", SpanishPresentation.distance(4.0))
+        assertEquals("160 m", SpanishPresentation.distance(160.4))
+        assertEquals("350 m", SpanishPresentation.distance(347.0))
+        assertEquals("990 m", SpanishPresentation.distance(996.0))
+        assertEquals("1,2 km", SpanishPresentation.distance(1_234.0))
+        assertEquals("12,0 km", SpanishPresentation.distance(12_000.0))
+    }
 }

@@ -59,7 +59,14 @@ private val LocationReference.missingLabel: String
  * Pending reports are shown as unverified warnings, never as changes to the published location.
  */
 @Composable
-fun LocationCard(guidance: LocationGuidance, establishmentName: String, now: Instant, modifier: Modifier = Modifier) {
+fun LocationCard(
+    guidance: LocationGuidance,
+    establishmentName: String,
+    now: Instant,
+    distance: DistanceStatus,
+    actions: LocationActions,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
 
     SurfaceCard(modifier.fillMaxWidth()) {
@@ -82,6 +89,8 @@ fun LocationCard(guidance: LocationGuidance, establishmentName: String, now: Ins
                         .border(1.4.dp, Palette.Ink, RoundedCornerShape(10.dp)),
                 )
             } ?: MissingReference(LocationReference.PIN)
+
+            DistanceSection(distance, actions)
 
             guidance.photoUrl?.let { url ->
                 AsyncImage(
@@ -215,5 +224,7 @@ private fun LocationCardWarningsPreview() = UniEatTheme {
         ),
         establishmentName = "Arepas La Esquina",
         now = now,
+        distance = DistanceStatus.PermissionNeeded,
+        actions = LocationActions({}, {}, {}),
     )
 }

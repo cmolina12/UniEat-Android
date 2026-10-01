@@ -36,7 +36,7 @@ class MenuDetailViewModelTest {
     @Test
     fun startsLoadingThenShowsContentWithClockOffset() = runTest(dispatcher) {
         val menu = menu()
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }) {
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation()) {
             serverNow - Duration.ofSeconds(90) // device clock 90 s behind the server
         }
         assertEquals(MenuDetailUiState.Loading, vm.state.value)
@@ -48,7 +48,7 @@ class MenuDetailViewModelTest {
 
     @Test
     fun goneBecomesGoneState() = runTest(dispatcher) {
-        val vm = MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) })
+        val vm = MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) }, StubLocation())
         advanceUntilIdle()
         assertEquals(MenuDetailUiState.Gone("Este menú ya venció"), vm.state.value)
     }
@@ -59,7 +59,7 @@ class MenuDetailViewModelTest {
         val vm = MenuDetailViewModel("m", StubRepository {
             calls++
             if (calls == 1) throw ApiException.offline() else MenuDetailResponse(serverNow, serverNow, menu())
-        }) { serverNow }
+        }, StubLocation()) { serverNow }
         advanceUntilIdle()
         assertEquals(ApiException.OFFLINE, (vm.state.value as MenuDetailUiState.Error).code)
 
@@ -76,7 +76,7 @@ class MenuDetailViewModelTest {
         establishmentId = "e", establishmentName = "Bowls", area = "Centro", lowestPriceCop = 12_000,
     )
 
-    private class StubRepository(private val detail: suspend () -> MenuDetailResponse) : MenuRepository {
+    internal class StubRepository(private val detail: suspend () -> MenuDetailResponse) : MenuRepository {
         override suspend fun menu(id: String) = detail()
         override suspend fun feed(filters: FeedFilters): FeedResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")

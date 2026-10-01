@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.osmdroid.android)
     implementation(libs.coil.compose)
+    implementation(libs.play.services.location)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

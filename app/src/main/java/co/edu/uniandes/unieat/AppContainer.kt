@@ -1,6 +1,9 @@
 package co.edu.uniandes.unieat
 
+import android.content.Context
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
+import co.edu.uniandes.unieat.data.location.FusedLocationRepository
+import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.remote.ApiException
@@ -9,6 +12,7 @@ import co.edu.uniandes.unieat.data.repository.RemoteMenuRepository
 
 /** Manual dependency injection: one instance per app, ViewModels get dependencies from here. */
 class AppContainer(
+    private val context: Context,
     val config: SupabaseConfig = SupabaseConfig.fromBuildConfig(),
 ) {
     // Replaced by the Supabase Auth session when the Login feature is built.
@@ -22,6 +26,8 @@ class AppContainer(
     val usesFakeData: Boolean get() = fakeMenuRepository != null
 
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
+
+    val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
 
     private companion object {
         /**
