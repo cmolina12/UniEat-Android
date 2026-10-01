@@ -114,6 +114,27 @@ class ApiContractTest {
         assertFalse(json, json.contains("metadata"))
     }
 
+    @Test
+    fun eventBatchIsPostedAndRejectedEventsDecode() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val body = """{"accepted":1,"duplicates":0,"rejected":[{"eventId":"e2","reason":"UNKNOWN_VERSION"}],
+            "receivedAt":"2026-09-29T17:00:01.000Z"}"""
+        val repo = co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository(client(HttpStatusCode.OK, body, seen))
+
+        val response = repo.sendBatch(listOf(
+            co.edu.uniandes.unieat.core.model.RemoteEvent("e1", "s", "p", 1, "detail_open", Instant.parse("2026-09-29T17:00:00Z")),
+        ))
+
+        val request = seen.single()
+        assertEquals(io.ktor.http.HttpMethod.Post, request.method)
+        assertEquals("/functions/v1/api-v1/events/batch", request.url.encodedPath)
+        val sent = (request.body as io.ktor.http.content.TextContent).text
+        assertTrue(sent, sent.contains("\"platform\":\"android\""))
+        assertTrue(sent, sent.contains("\"eventId\":\"e1\""))
+        assertEquals(1, response.accepted)
+        assertEquals("UNKNOWN_VERSION", response.rejected.single().reason)
+    }
+
     private companion object {
         const val FEED_SAMPLE = """
         {

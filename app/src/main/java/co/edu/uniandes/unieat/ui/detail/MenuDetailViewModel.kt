@@ -12,6 +12,9 @@ import co.edu.uniandes.unieat.core.decision.Proximity
 import co.edu.uniandes.unieat.core.decision.proximity
 import co.edu.uniandes.unieat.core.decision.locationGuidance
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.data.analytics.EventKind
+import co.edu.uniandes.unieat.data.analytics.EventTracker
+import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
@@ -89,6 +92,7 @@ class MenuDetailViewModel(
     private val menuId: String,
     private val repository: MenuRepository,
     private val locationRepository: LocationRepository,
+    private val eventTracker: EventTracker,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
 
@@ -109,6 +113,9 @@ class MenuDetailViewModel(
     private val _arrival = MutableStateFlow<ArrivalAnswer?>(null)
     val arrival: StateFlow<ArrivalAnswer?> = _arrival.asStateFlow()
 
+    /** detail_open is sent once per opening, not again on retry or rotation (the ViewModel survives it). */
+    private var openTracked = false
+
     init {
         load()
     }
@@ -118,6 +125,10 @@ class MenuDetailViewModel(
         viewModelScope.launch {
             _state.value = try {
                 val response = repository.menu(menuId)
+                if (!openTracked) {
+                    openTracked = true
+                    eventTracker.track(EventKind.DETAIL_OPEN, response.menu, SCREEN)
+                }
                 MenuDetailUiState.Content(response.menu, Duration.between(deviceClock(), response.serverNow))
             } catch (e: ApiException) {
                 when (e.code) {
@@ -154,7 +165,16 @@ class MenuDetailViewModel(
     fun onLocationPromptDismissed() = access.update { it.copy(declined = true) }
 
     fun onArrivalAnswered(arrived: Boolean) {
+        if (_arrival.value != null) return // one answer per visit; a double tap must not send two events
         _arrival.value = if (arrived) ArrivalAnswer.CONFIRMED else ArrivalAnswer.DISMISSED
+        val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
+        if (arrived) eventTracker.track(EventKind.ARRIVAL, menu, SCREEN, source = "arrival_prompt")
+    }
+
+    /** "Elegir este menú" (same event as iOS). */
+    fun onSelect() {
+        val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
+        eventTracker.track(EventKind.SELECTION, menu, SCREEN)
     }
 
     private fun distanceFlow(state: MenuDetailUiState, access: LocationAccess, enabled: Boolean): Flow<DistanceStatus> {
@@ -177,10 +197,17 @@ class MenuDetailViewModel(
     }
 
     companion object {
+        private const val SCREEN = "detail"
+
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                MenuDetailViewModel(menuId, app.container.menuRepository, app.container.locationRepository)
+                MenuDetailViewModel(
+                    menuId,
+                    app.container.menuRepository,
+                    app.container.locationRepository,
+                    app.container.eventTracker,
+                )
             }
         }
     }

@@ -116,6 +116,7 @@ fun MenuDetailScreen(
         currentMenuId = menuId,
         onBack = onBack,
         onRetry = viewModel::load,
+        onSelect = viewModel::onSelect,
         onOpenMenu = onOpenMenu,
     )
 }
@@ -131,6 +132,7 @@ private fun MenuDetailContent(
     currentMenuId: String,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onSelect: () -> Unit,
     onOpenMenu: (String) -> Unit,
 ) {
     Column(
@@ -153,7 +155,7 @@ private fun MenuDetailContent(
                 CircularProgressIndicator(color = Palette.Ink)
             }
             is MenuDetailUiState.Content -> MenuBody(
-                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions,
+                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect,
             )
             is MenuDetailUiState.Gone -> StatusMessage(
                 title = state.message,
@@ -194,6 +196,7 @@ private fun MenuBody(
     distance: DistanceStatus,
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
+    onSelect: () -> Unit,
 ) {
     val active = menu.isActive(now)
 
@@ -244,8 +247,7 @@ private fun MenuBody(
     }
 
     if (active) {
-        // Phase 4 sends the "selection" event from here.
-        SolidButton("Elegir este menú", onClick = {}, icon = Icons.Filled.Check, color = Palette.Yellow)
+        SolidButton("Elegir este menú", onClick = onSelect, icon = Icons.Filled.Check, color = Palette.Yellow)
     } else {
         Text(
             "Esta publicación venció. Vuelve a la lista de menús para ver opciones vigentes.",
@@ -434,6 +436,7 @@ private fun MenuDetailPreview() = UniEatTheme {
         currentMenuId = "preview",
         onBack = {},
         onRetry = {},
+        onSelect = {},
         onOpenMenu = {},
     )
 }

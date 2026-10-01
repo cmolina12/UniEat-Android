@@ -39,6 +39,7 @@ class MenuDetailDistanceTest {
             "m",
             MenuDetailViewModelTest.StubRepository { MenuDetailResponse(now, now, menu) },
             location,
+            RecordingTracker(),
         ) { now }
         backgroundScope.launch { vm.distance.collect {} } // like the screen collecting it
         advanceUntilIdle()
@@ -147,7 +148,7 @@ class MenuDetailDistanceTest {
             override fun locationUpdates(precise: Boolean) =
                 kotlinx.coroutines.flow.flow<UserLocation> { throw SecurityException("revoked") }
         }
-        val vm = MenuDetailViewModel("m", MenuDetailViewModelTest.StubRepository { MenuDetailResponse(now, now, menu()) }, location) { now }
+        val vm = MenuDetailViewModel("m", MenuDetailViewModelTest.StubRepository { MenuDetailResponse(now, now, menu()) }, location, RecordingTracker()) { now }
         backgroundScope.launch { vm.distance.collect {} }
         vm.onLocationPermissionChecked(LocationPermission.PRECISE)
         advanceUntilIdle()

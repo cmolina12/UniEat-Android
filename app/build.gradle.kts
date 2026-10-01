@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.osmdroid.android)
     implementation(libs.coil.compose)
     implementation(libs.play.services.location)
+    implementation(libs.androidx.work.runtime.ktx)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

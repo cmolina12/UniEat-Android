@@ -126,4 +126,9 @@ data class EventBatch(
 data class BatchResponse(
     val accepted: Int,
     val duplicates: Int = 0,
+    /** Events the server will never accept (e.g. UNKNOWN_VERSION); resending them is pointless. */
+    val rejected: List<RejectedEvent> = emptyList(),
 )
+
+@Serializable
+data class RejectedEvent(val eventId: String, val reason: String)
