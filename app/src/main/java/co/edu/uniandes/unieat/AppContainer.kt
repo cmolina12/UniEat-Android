@@ -16,5 +16,18 @@ class AppContainer(
 
     val apiClient: ApiClient by lazy { ApiClient(config, tokenProvider) }
 
-    val menuRepository: MenuRepository by lazy { RemoteMenuRepository(apiClient) }
+    private val fakeMenuRepository: MenuRepository? = if (USE_FAKE_DATA) DevDataSource.menuRepository() else null
+
+    /** True when screens run on debug fake data (seed.sql) instead of the API. Always false in release. */
+    val usesFakeData: Boolean get() = fakeMenuRepository != null
+
+    val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
+
+    private companion object {
+        /**
+         * Switch for development: true = debug builds use FakeMenuRepository (no login needed);
+         * false = always call api-v1. Release builds ignore it because their DevDataSource is empty.
+         */
+        const val USE_FAKE_DATA = true
+    }
 }
