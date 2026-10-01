@@ -135,6 +135,27 @@ class ApiContractTest {
         assertEquals("UNKNOWN_VERSION", response.rejected.single().reason)
     }
 
+    @Test
+    fun locationReportIsPostedWithTheContractShape() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val body = """{"reportId":"r1","publicationId":"p","version":2,"kind":"location","status":"pending",
+            "createdAt":"2026-09-29T17:00:00.000Z",
+            "message":"Reporte recibido. Queda pendiente hasta que se revise; el menú oficial no cambia."}"""
+        val repo = co.edu.uniandes.unieat.data.repository.RemoteReportRepository(client(HttpStatusCode.Created, body, seen))
+
+        val response = repo.submit(co.edu.uniandes.unieat.core.model.ReportBody(
+            publicationId = "p", version = 2, kind = co.edu.uniandes.unieat.core.model.ReportKind.LOCATION,
+        ))
+
+        val request = seen.single()
+        assertEquals(io.ktor.http.HttpMethod.Post, request.method)
+        assertEquals("/functions/v1/api-v1/reports", request.url.encodedPath)
+        val sent = (request.body as io.ktor.http.content.TextContent).text
+        assertEquals("""{"publicationId":"p","version":2,"kind":"location"}""", sent)
+        assertEquals("pending", response.status)
+        assertEquals(co.edu.uniandes.unieat.core.model.ReportKind.LOCATION, response.kind)
+    }
+
     private companion object {
         const val FEED_SAMPLE = """
         {

@@ -45,6 +45,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +67,7 @@ import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.decision.LocationGuidance
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.MenuDish
+import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
@@ -88,6 +92,13 @@ fun MenuDetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val distance by viewModel.distance.collectAsStateWithLifecycle()
     val arrival by viewModel.arrival.collectAsStateWithLifecycle()
+    val report by viewModel.report.collectAsStateWithLifecycle()
+    // Which kind the sheet opened with; null = closed. Saveable so rotation keeps it open.
+    var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
+    val openReport = { kind: ReportKind ->
+        viewModel.onReportSheetOpened()
+        reportKind = kind
+    }
     val context = LocalContext.current
     val container = (context.applicationContext as UniEatApplication).container
 
@@ -110,7 +121,9 @@ fun MenuDetailScreen(
             onAllow = { permissionLauncher.launch(arrayOf(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION)) },
             onNotNow = viewModel::onLocationPromptDismissed,
             onArrivalAnswered = viewModel::onArrivalAnswered,
+            onReportLocation = { openReport(ReportKind.LOCATION) },
         ),
+        onReport = { openReport(ReportKind.UNAVAILABLE) },
         isDemo = container.usesFakeData,
         fixtures = if (container.usesFakeData) DevDataSource.fixtures else emptyList(),
         currentMenuId = menuId,
@@ -119,6 +132,18 @@ fun MenuDetailScreen(
         onSelect = viewModel::onSelect,
         onOpenMenu = onOpenMenu,
     )
+
+    val content = state as? MenuDetailUiState.Content
+    val kind = reportKind
+    if (content != null && kind != null) {
+        ReportSheet(
+            menu = content.menu,
+            initialKind = kind,
+            submission = report,
+            onSubmit = viewModel::submitReport,
+            onDismiss = { reportKind = null },
+        )
+    }
 }
 
 @Composable
@@ -127,6 +152,7 @@ private fun MenuDetailContent(
     distance: DistanceStatus,
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
+    onReport: () -> Unit,
     isDemo: Boolean,
     fixtures: List<DemoFixture>,
     currentMenuId: String,
@@ -155,7 +181,7 @@ private fun MenuDetailContent(
                 CircularProgressIndicator(color = Palette.Ink)
             }
             is MenuDetailUiState.Content -> MenuBody(
-                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect,
+                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
             )
             is MenuDetailUiState.Gone -> StatusMessage(
                 title = state.message,
@@ -197,6 +223,7 @@ private fun MenuBody(
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
     onSelect: () -> Unit,
+    onReport: () -> Unit,
 ) {
     val active = menu.isActive(now)
 
@@ -258,6 +285,7 @@ private fun MenuBody(
                 .padding(12.dp),
         )
     }
+    SolidButton("Reportar un cambio", onClick = onReport, icon = Icons.Filled.Warning, color = Palette.Coral)
 }
 
 @Composable
@@ -430,7 +458,8 @@ private fun MenuDetailPreview() = UniEatTheme {
         ),
         distance = DistanceStatus.PermissionNeeded,
         arrival = null,
-        locationActions = LocationActions({}, {}, {}),
+        locationActions = LocationActions({}, {}, {}, {}),
+        onReport = {},
         isDemo = true,
         fixtures = emptyList(),
         currentMenuId = "preview",

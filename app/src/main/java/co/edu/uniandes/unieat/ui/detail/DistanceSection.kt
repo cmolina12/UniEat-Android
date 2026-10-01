@@ -44,6 +44,8 @@ data class LocationActions(
     val onAllow: () -> Unit,
     val onNotNow: () -> Unit,
     val onArrivalAnswered: (arrived: Boolean) -> Unit,
+    /** Opens the report sheet preselected on "location" (feeds the BQ-05 warning). */
+    val onReportLocation: () -> Unit,
 )
 
 /**

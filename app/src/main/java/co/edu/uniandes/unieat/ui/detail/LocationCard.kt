@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -109,6 +111,15 @@ fun LocationCard(
 
             guidance.entranceDescription?.let { ReferenceRow(Icons.Filled.Info, "Entrada: $it") }
                 ?: MissingReference(LocationReference.ENTRANCE)
+
+            Text(
+                "¿La ubicación o la entrada no coinciden? Repórtalo",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                textDecoration = TextDecoration.Underline,
+                color = Palette.Ink,
+                modifier = Modifier.clickable(onClick = actions.onReportLocation),
+            )
 
             Text(
                 "Actualizado ${SpanishPresentation.relative(guidance.updatedAt, now)}",
@@ -225,6 +236,6 @@ private fun LocationCardWarningsPreview() = UniEatTheme {
         establishmentName = "Arepas La Esquina",
         now = now,
         distance = DistanceStatus.PermissionNeeded,
-        actions = LocationActions({}, {}, {}),
+        actions = LocationActions({}, {}, {}, {}),
     )
 }

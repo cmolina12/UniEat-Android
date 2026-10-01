@@ -17,6 +17,8 @@ import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.data.repository.RemoteMenuRepository
+import co.edu.uniandes.unieat.data.repository.RemoteReportRepository
+import co.edu.uniandes.unieat.data.repository.ReportRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +42,10 @@ class AppContainer(
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
 
     val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
+
+    val reportRepository: ReportRepository by lazy {
+        (if (usesFakeData) DevDataSource.reportRepository() else null) ?: RemoteReportRepository(apiClient)
+    }
 
     // Analytics pipeline: EventTracker → EventQueue (disk) → WorkManager → EventUploader → POST /events/batch.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

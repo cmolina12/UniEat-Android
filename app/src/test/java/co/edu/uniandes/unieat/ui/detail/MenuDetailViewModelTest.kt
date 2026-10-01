@@ -37,7 +37,7 @@ class MenuDetailViewModelTest {
     @Test
     fun startsLoadingThenShowsContentWithClockOffset() = runTest(dispatcher) {
         val menu = menu()
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), RecordingTracker()) {
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), RecordingTracker(), StubReports()) {
             serverNow - Duration.ofSeconds(90) // device clock 90 s behind the server
         }
         assertEquals(MenuDetailUiState.Loading, vm.state.value)
@@ -49,7 +49,7 @@ class MenuDetailViewModelTest {
 
     @Test
     fun goneBecomesGoneState() = runTest(dispatcher) {
-        val vm = MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) }, StubLocation(), RecordingTracker())
+        val vm = MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) }, StubLocation(), RecordingTracker(), StubReports())
         advanceUntilIdle()
         assertEquals(MenuDetailUiState.Gone("Este menú ya venció"), vm.state.value)
     }
@@ -60,7 +60,7 @@ class MenuDetailViewModelTest {
         val vm = MenuDetailViewModel("m", StubRepository {
             calls++
             if (calls == 1) throw ApiException.offline() else MenuDetailResponse(serverNow, serverNow, menu())
-        }, StubLocation(), RecordingTracker()) { serverNow }
+        }, StubLocation(), RecordingTracker(), StubReports()) { serverNow }
         advanceUntilIdle()
         assertEquals(ApiException.OFFLINE, (vm.state.value as MenuDetailUiState.Error).code)
 
@@ -74,7 +74,7 @@ class MenuDetailViewModelTest {
     fun detailOpenIsTrackedOnceWithTheVersionShown() = runTest(dispatcher) {
         val tracker = RecordingTracker()
         val menu = menu().copy(version = 3)
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), tracker) { serverNow }
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), tracker, StubReports()) { serverNow }
         advanceUntilIdle()
         vm.load() // retry / pull-to-refresh must not count a second opening
         advanceUntilIdle()
@@ -88,7 +88,7 @@ class MenuDetailViewModelTest {
     @Test
     fun goneMenuIsNotTrackedAsOpened() = runTest(dispatcher) {
         val tracker = RecordingTracker()
-        MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) }, StubLocation(), tracker)
+        MenuDetailViewModel("m", StubRepository { throw apiError(ApiException.GONE, "Este menú ya venció", 410) }, StubLocation(), tracker, StubReports())
         advanceUntilIdle()
         assertEquals(emptyList<RecordingTracker.Tracked>(), tracker.events)
     }
@@ -96,7 +96,7 @@ class MenuDetailViewModelTest {
     @Test
     fun arrivalIsTrackedOnlyWhenConfirmedAndOnlyOnce() = runTest(dispatcher) {
         val tracker = RecordingTracker()
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker) { serverNow }
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
         advanceUntilIdle()
 
         vm.onArrivalAnswered(true)
@@ -109,7 +109,7 @@ class MenuDetailViewModelTest {
     @Test
     fun notYetSendsNoArrival() = runTest(dispatcher) {
         val tracker = RecordingTracker()
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker) { serverNow }
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
         advanceUntilIdle()
 
         vm.onArrivalAnswered(false)
@@ -120,7 +120,7 @@ class MenuDetailViewModelTest {
     @Test
     fun selectionIsTracked() = runTest(dispatcher) {
         val tracker = RecordingTracker()
-        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker) { serverNow }
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
         advanceUntilIdle()
         vm.onSelect()
         assertEquals(EventKind.SELECTION, tracker.events.last().kind)

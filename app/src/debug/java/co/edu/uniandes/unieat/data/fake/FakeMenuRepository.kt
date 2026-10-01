@@ -24,14 +24,14 @@ class FakeMenuRepository(
     override suspend fun feed(filters: FeedFilters): FeedResponse {
         delay(latencyMillis)
         val now = clock()
-        val menus = SeedMenus.all(now).filter { it.closedAt == null && it.isActive(now) }
+        val menus = FakeBackend.menus(now).filter { it.closedAt == null && it.isActive(now) }
         return FeedResponse(serverNow = now, fetchedAt = now, menus = menus, resultCount = menus.size)
     }
 
     override suspend fun menu(id: String): MenuDetailResponse {
         delay(latencyMillis)
         val now = clock()
-        val menu = SeedMenus.all(now).firstOrNull { it.id == id }
+        val menu = FakeBackend.menus(now).firstOrNull { it.id == id }
             ?: throw ApiException(ApiError(ApiException.NOT_FOUND, "No encontramos ese menú."), 404)
         if (menu.closedAt != null || !menu.isActive(now)) {
             val closed = menu.closedAt != null
