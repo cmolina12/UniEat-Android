@@ -1,0 +1,15 @@
+# Gradle / Android Studio
+.gradle/
+build/
+/captures
+.externalNativeBuild/
+.cxx/
+.idea/
+*.iml
+.kotlin/
+
+# Local config: SDK path and Supabase keys. Never commit.
+local.properties
+
+# OS
+.DS_Store

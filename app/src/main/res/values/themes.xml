@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window theme only; Compose colors come from ui/theme/Theme.kt. -->
+    <style name="Theme.UniEat" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/cream</item>
+        <item name="android:statusBarColor">@color/cream</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

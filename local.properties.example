@@ -1,0 +1,4 @@
+# Copy to local.properties (git-ignored) and fill in. Android Studio adds sdk.dir itself.
+# Use http://10.0.2.2:54321 to reach a local `supabase start` from the emulator.
+supabase.url=https://<project-ref>.supabase.co
+supabase.publishableKey=sb_publishable_xxx
