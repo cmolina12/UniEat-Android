@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
@@ -46,6 +47,7 @@ import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.MenuDish
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
+import co.edu.uniandes.unieat.ui.detail.locationPermission
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -66,8 +68,16 @@ fun FeedScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()
-    val container = (LocalContext.current.applicationContext as UniEatApplication).container
+    val context = LocalContext.current
+    val container = (context.applicationContext as UniEatApplication).container
     var showFilters by rememberSaveable { mutableStateOf(false) }
+
+    // Context-aware: re-check the permission on every resume (it may change in settings).
+    // The feed never asks for it itself; it uses the permission if the student already granted it.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onLocationPermissionChecked(context.locationPermission())
+        onPauseOrDispose {}
+    }
 
     // Small auth PR: an expired session sends the student back to the login.
     LaunchedEffect(state) {
@@ -203,6 +213,8 @@ internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Sticker(menu.area, color = Palette.Cyan, icon = Icons.Filled.Place)
                 WaitSticker(menu, now)
+                // Walking time computed by the backend from `origin`; absent without location.
+                menu.travelMinutes?.let { Sticker("~$it min a pie", color = Palette.Paper) }
                 if (menu.validUntil <= now + EXPIRING_SOON) {
                     Sticker("Menú por vencer", color = Palette.Coral, icon = Icons.Filled.Warning)
                 }

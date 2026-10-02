@@ -22,12 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
+import co.edu.uniandes.unieat.ui.detail.locationPermission
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -49,7 +51,14 @@ fun RecommendScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()
     val index by viewModel.recommendationIndex.collectAsStateWithLifecycle()
-    val container = (LocalContext.current.applicationContext as UniEatApplication).container
+    val context = LocalContext.current
+    val container = (context.applicationContext as UniEatApplication).container
+
+    // Same context-aware check as the feed, so this ranking is also ordered by walking time.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onLocationPermissionChecked(context.locationPermission())
+        onPauseOrDispose {}
+    }
 
     LaunchedEffect(state) {
         if (state is FeedUiState.SessionExpired) onSessionExpired()

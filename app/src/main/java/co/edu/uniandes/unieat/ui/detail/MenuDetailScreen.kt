@@ -404,7 +404,8 @@ private fun FixturePicker(fixtures: List<DemoFixture>, currentMenuId: String, on
     }
 }
 
-private fun Context.locationPermission(): LocationPermission = when {
+/** Current runtime permission. Internal: the Feed reuses this same check for the `origin` sensor. */
+internal fun Context.locationPermission(): LocationPermission = when {
     ContextCompat.checkSelfPermission(this, ACCESS_FINE_LOCATION) == PERMISSION_GRANTED -> LocationPermission.PRECISE
     ContextCompat.checkSelfPermission(this, ACCESS_COARSE_LOCATION) == PERMISSION_GRANTED -> LocationPermission.APPROXIMATE
     else -> LocationPermission.NONE
