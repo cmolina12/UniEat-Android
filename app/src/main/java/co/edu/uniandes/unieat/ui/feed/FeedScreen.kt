@@ -23,9 +23,14 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,7 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.MenuDish
+import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
@@ -58,7 +65,9 @@ fun FeedScreen(
     viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory()),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val filters by viewModel.filters.collectAsStateWithLifecycle()
     val container = (LocalContext.current.applicationContext as UniEatApplication).container
+    var showFilters by rememberSaveable { mutableStateOf(false) }
 
     // Small auth PR: an expired session sends the student back to the login.
     LaunchedEffect(state) {
@@ -67,20 +76,36 @@ fun FeedScreen(
 
     FeedContent(
         state = state,
+        filters = filters,
         isDemo = container.usesFakeData,
         onOpenMenu = onOpenMenu,
         onRetry = viewModel::load,
         onMenuShown = viewModel::onMenuShown,
+        onOpenFilters = { showFilters = true },
     )
+
+    if (showFilters) {
+        FiltersSheet(
+            current = filters,
+            onApply = {
+                viewModel.applyFilters(it)
+                showFilters = false
+            },
+            onDismiss = { showFilters = false },
+        )
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FeedContent(
     state: FeedUiState,
+    filters: FeedFilters,
     isDemo: Boolean,
     onOpenMenu: (String) -> Unit,
     onRetry: () -> Unit,
     onMenuShown: (DailyMenu) -> Unit,
+    onOpenFilters: () -> Unit,
 ) {
     val content = state as? FeedUiState.Content
     // Ticks every minute so menus that expire while on screen disappear, like iOS.
@@ -95,7 +120,26 @@ private fun FeedContent(
         item { BrandHeader("Hoy") }
         if (isDemo) item { DemoNotice("Datos de prueba (seed.sql) · sin conexión al servidor") }
         item {
-            Text("Menús vigentes", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Menús vigentes",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Palette.Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                FilterButton(onOpenFilters)
+            }
+        }
+        item {
+            // Summary of the active filters, so what the list obeys is always visible.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                filters.budgetCop?.let { Sticker("Hasta ${it.cop}") }
+                filters.availableMinutes?.let { Sticker("$it min", color = Palette.Paper) }
+                filters.area?.let { Sticker(it, color = Palette.Cyan, icon = Icons.Filled.Place) }
+                filters.diet?.let { Sticker(SpanishPresentation.diet(it), color = Palette.Green) }
+                filters.paymentMethod?.let { Sticker(it, color = Palette.Paper) }
+            }
         }
 
         when (state) {
@@ -127,10 +171,26 @@ private fun FeedContent(
     }
 }
 
+/** "Filtros" chip next to the section title, same look as the stickers. */
+@Composable
+private fun FilterButton(onClick: () -> Unit) {
+    Text(
+        "Filtros",
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        color = Palette.Ink,
+        modifier = Modifier
+            .background(Palette.Yellow, CircleShape)
+            .border(1.4.dp, Palette.Ink, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    )
+}
+
 /** One feed card: name, price, the BQ-06 wait estimate and the backend's rank explanation. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
+internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
     SurfaceCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Top) {
@@ -170,7 +230,7 @@ private fun WaitSticker(menu: DailyMenu, now: Instant) {
 }
 
 @Composable
-private fun EmptyFeedCard() {
+internal fun EmptyFeedCard() {
     FeedStatusCard(
         title = "No hay menús que cumplan estos filtros",
         body = "Prueba otro presupuesto, zona o preferencia de dieta.",
@@ -178,7 +238,7 @@ private fun EmptyFeedCard() {
 }
 
 @Composable
-private fun FeedStatusCard(title: String, body: String, action: (@Composable () -> Unit)? = null) {
+internal fun FeedStatusCard(title: String, body: String, action: (@Composable () -> Unit)? = null) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -220,9 +280,11 @@ private fun FeedPreview() = UniEatTheme {
             ),
             clockOffset = Duration.ZERO,
         ),
+        filters = FeedFilters(),
         isDemo = true,
         onOpenMenu = {},
         onRetry = {},
         onMenuShown = {},
+        onOpenFilters = {},
     )
 }

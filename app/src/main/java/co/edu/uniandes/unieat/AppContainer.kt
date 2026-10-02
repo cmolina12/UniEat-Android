@@ -2,6 +2,7 @@ package co.edu.uniandes.unieat
 
 import android.content.Context
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
+import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.EventQueue
 import co.edu.uniandes.unieat.data.analytics.EventTracker
@@ -22,6 +23,7 @@ import co.edu.uniandes.unieat.data.repository.ReportRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 
 /** Manual dependency injection: one instance per app, ViewModels get dependencies from here. */
@@ -46,6 +48,9 @@ class AppContainer(
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
 
     val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
+
+    /** Feed filters shared by "Hoy" and "Elige por mí": both ViewModels observe this same flow. */
+    val feedFilters = MutableStateFlow(FeedFilters())
 
     val reportRepository: ReportRepository by lazy {
         (if (usesFakeData) DevDataSource.reportRepository() else null) ?: RemoteReportRepository(apiClient)

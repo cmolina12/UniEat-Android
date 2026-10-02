@@ -17,6 +17,8 @@ import co.edu.uniandes.unieat.data.repository.MenuRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
@@ -29,7 +31,11 @@ sealed interface FeedUiState {
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
      */
-    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration) : FeedUiState
+    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration) : FeedUiState {
+        /** "Elige por mí": position [index] of the backend ranking, wrapping around at the end. */
+        fun recommendation(index: Int): DailyMenu? =
+            if (menus.isEmpty()) null else menus[index % menus.size]
+    }
 
     /** AUTH_REQUIRED: the screen navigates back to the login. */
     data object SessionExpired : FeedUiState
@@ -40,52 +46,72 @@ sealed interface FeedUiState {
 /**
  * Loads GET /feed through [MenuRepository] and maps the outcome to [FeedUiState].
  * Observer pattern: the screen collects [state] and re-renders on every change.
+ * The filters flow is shared with the other tab, so applying filters reloads both.
  */
 class FeedViewModel(
     private val repository: MenuRepository,
     private val eventTracker: EventTracker,
+    private val sharedFilters: MutableStateFlow<FeedFilters>,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<FeedUiState>(FeedUiState.Loading)
     val state: StateFlow<FeedUiState> = _state.asStateFlow()
 
-    // Backend defaults for now; the "Elige por mí" phase makes them editable.
-    private val filters = FeedFilters()
+    /** Current filters, for the sheet and the summary. */
+    val filters: StateFlow<FeedFilters> = sharedFilters.asStateFlow()
+
+    private val _recommendationIndex = MutableStateFlow(0)
+    val recommendationIndex: StateFlow<Int> = _recommendationIndex.asStateFlow()
 
     /** feed_impression once per menu per session, like the iOS `impressions` set. */
     private val impressed = mutableSetOf<String>()
 
     init {
-        load()
-    }
-
-    /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
-    fun load() {
-        _state.value = FeedUiState.Loading
+        // Every filter change reloads; collectLatest drops a request whose filters are stale.
         viewModelScope.launch {
-            _state.value = try {
-                val response = repository.feed(filters)
-                FeedUiState.Content(
-                    menus = response.menus.filter { it.closedAt == null && it.isActive(response.serverNow) },
-                    clockOffset = Duration.between(deviceClock(), response.serverNow),
-                )
-            } catch (e: ApiException) {
-                when (e.code) {
-                    ApiException.AUTH_REQUIRED -> FeedUiState.SessionExpired
-                    ApiException.OFFLINE -> FeedUiState.Error(
-                        "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
-                        e.code,
-                    )
-                    else -> FeedUiState.Error(e.error.message, e.code)
-                }
-            }
+            sharedFilters.collectLatest { fetch(it) }
         }
     }
+
+    /** Retry with the current filters. */
+    fun load() {
+        viewModelScope.launch { fetch(sharedFilters.value) }
+    }
+
+    /** From the filters sheet. The shared flow emits and both tabs reload. */
+    fun applyFilters(filters: FeedFilters) {
+        sharedFilters.value = filters
+    }
+
+    /** "Elegir otra opción": move to the next menu of the ranking. */
+    fun nextRecommendation() = _recommendationIndex.update { it + 1 }
 
     /** Tracked from the screen when a card actually becomes visible; retries never double-count. */
     fun onMenuShown(menu: DailyMenu) {
         if (impressed.add(menu.id)) eventTracker.track(EventKind.FEED_IMPRESSION, menu, SCREEN)
+    }
+
+    /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
+    private suspend fun fetch(filters: FeedFilters) {
+        _state.value = FeedUiState.Loading
+        _recommendationIndex.value = 0 // a new load starts again at the backend's best option
+        _state.value = try {
+            val response = repository.feed(filters)
+            FeedUiState.Content(
+                menus = response.menus.filter { it.closedAt == null && it.isActive(response.serverNow) },
+                clockOffset = Duration.between(deviceClock(), response.serverNow),
+            )
+        } catch (e: ApiException) {
+            when (e.code) {
+                ApiException.AUTH_REQUIRED -> FeedUiState.SessionExpired
+                ApiException.OFFLINE -> FeedUiState.Error(
+                    "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
+                    e.code,
+                )
+                else -> FeedUiState.Error(e.error.message, e.code)
+            }
+        }
     }
 
     companion object {
@@ -94,7 +120,7 @@ class FeedViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                FeedViewModel(app.container.menuRepository, app.container.eventTracker)
+                FeedViewModel(app.container.menuRepository, app.container.eventTracker, app.container.feedFilters)
             }
         }
     }

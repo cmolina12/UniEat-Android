@@ -12,6 +12,7 @@ import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.ui.detail.RecordingTracker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -19,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import java.time.Duration
@@ -36,9 +38,10 @@ class FeedViewModelTest {
 
     private fun viewModel(
         tracker: RecordingTracker = RecordingTracker(),
+        sharedFilters: MutableStateFlow<FeedFilters> = MutableStateFlow(FeedFilters()),
         deviceClock: () -> Instant = { serverNow },
-        feed: suspend () -> FeedResponse,
-    ) = FeedViewModel(StubRepository(feed), tracker, deviceClock)
+        feed: suspend (FeedFilters) -> FeedResponse,
+    ) = FeedViewModel(StubRepository(feed), tracker, sharedFilters, deviceClock)
 
     @Test
     fun startsLoadingThenShowsMenusInBackendOrder() = runTest(dispatcher) {
@@ -106,6 +109,79 @@ class FeedViewModelTest {
     }
 
     @Test
+    fun initialLoadUsesTheSharedFilters() = runTest(dispatcher) {
+        val seen = mutableListOf<FeedFilters>()
+        val filters = MutableStateFlow(FeedFilters(budgetCop = 15_000, diet = "vegetarian"))
+        viewModel(sharedFilters = filters) { f ->
+            seen += f
+            feedResponse(emptyList())
+        }
+        advanceUntilIdle()
+
+        assertEquals(listOf(FeedFilters(budgetCop = 15_000, diet = "vegetarian")), seen)
+    }
+
+    @Test
+    fun applyFiltersReloadsWithTheNewOnes() = runTest(dispatcher) {
+        val seen = mutableListOf<FeedFilters>()
+        val vm = viewModel { f ->
+            seen += f
+            feedResponse(listOf(menu("a")))
+        }
+        advanceUntilIdle()
+
+        vm.applyFilters(FeedFilters(budgetCop = 10_000, area = "Norte"))
+        advanceUntilIdle()
+
+        assertEquals(FeedFilters(budgetCop = 10_000, area = "Norte"), seen.last())
+        assertEquals(FeedFilters(budgetCop = 10_000, area = "Norte"), vm.filters.value)
+        assertEquals(2, seen.size)
+    }
+
+    @Test
+    fun applyingFiltersInOneTabReloadsTheOtherTab() = runTest(dispatcher) {
+        // Both tabs ("Hoy" and "Elige por mí") observe the same shared filters flow.
+        val shared = MutableStateFlow(FeedFilters())
+        val seenByOther = mutableListOf<FeedFilters>()
+        val feedTab = viewModel(sharedFilters = shared) { feedResponse(listOf(menu("a"))) }
+        viewModel(sharedFilters = shared) { f ->
+            seenByOther += f
+            feedResponse(listOf(menu("a")))
+        }
+        advanceUntilIdle()
+
+        feedTab.applyFilters(FeedFilters(diet = "vegan"))
+        advanceUntilIdle()
+
+        assertEquals(FeedFilters(diet = "vegan"), seenByOther.last())
+    }
+
+    @Test
+    fun recommendationFollowsTheBackendOrderAndWrapsAround() = runTest(dispatcher) {
+        val content = FeedUiState.Content(listOf(menu("a"), menu("b")), Duration.ZERO)
+
+        assertEquals(menu("a"), content.recommendation(0)) // backend's best option
+        assertEquals(menu("b"), content.recommendation(1))
+        assertEquals(menu("a"), content.recommendation(2)) // wraps around
+
+        assertNull(FeedUiState.Content(emptyList(), Duration.ZERO).recommendation(0))
+    }
+
+    @Test
+    fun nextRecommendationAdvancesAndANewLoadResetsIt() = runTest(dispatcher) {
+        val vm = viewModel { feedResponse(listOf(menu("a"), menu("b"))) }
+        advanceUntilIdle()
+
+        vm.nextRecommendation()
+        assertEquals(1, vm.recommendationIndex.value)
+
+        vm.applyFilters(FeedFilters(area = "Sur")) // new load: back to the best option
+        advanceUntilIdle()
+
+        assertEquals(0, vm.recommendationIndex.value)
+    }
+
+    @Test
     fun impressionIsTrackedOncePerMenu() = runTest(dispatcher) {
         val tracker = RecordingTracker()
         val a = menu("a").copy(version = 2)
@@ -135,8 +211,8 @@ class FeedViewModelTest {
         establishmentName = "Local $id", area = "Centro", lowestPriceCop = 12_000,
     )
 
-    internal class StubRepository(private val feed: suspend () -> FeedResponse) : MenuRepository {
-        override suspend fun feed(filters: FeedFilters): FeedResponse = feed()
+    internal class StubRepository(private val onFeed: suspend (FeedFilters) -> FeedResponse) : MenuRepository {
+        override suspend fun feed(filters: FeedFilters): FeedResponse = onFeed(filters)
         override suspend fun menu(id: String): MenuDetailResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")
         override suspend fun publish(body: MenuBody): DailyMenu = error("unused")
