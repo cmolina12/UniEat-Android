@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import co.edu.uniandes.unieat.DemoFixture
+import co.edu.uniandes.unieat.DevDataSource
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.decision.Coordinate
 import co.edu.uniandes.unieat.core.decision.LocationGuidance
@@ -121,6 +123,10 @@ class MenuDetailViewModel(
     private val locationRepository: LocationRepository,
     private val eventTracker: EventTracker,
     private val reportRepository: ReportRepository,
+    /** True when the app runs on debug fake data; the screen shows a notice. */
+    val isDemo: Boolean = false,
+    /** Debug-only sample menus to jump between (empty with real data and in release). */
+    val fixtures: List<DemoFixture> = emptyList(),
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
 
@@ -301,12 +307,15 @@ class MenuDetailViewModel(
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
+                val demo = app.container.usesFakeData
                 MenuDetailViewModel(
                     menuId,
                     app.container.menuRepository,
                     app.container.locationRepository,
                     app.container.eventTracker,
                     app.container.reportRepository,
+                    isDemo = demo,
+                    fixtures = if (demo) DevDataSource.fixtures else emptyList(),
                 )
             }
         }

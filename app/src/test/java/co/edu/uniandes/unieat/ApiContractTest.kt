@@ -72,6 +72,32 @@ class ApiContractTest {
     }
 
     @Test
+    fun menuDetailDecodesReportsAndFeedsLocationGuidance() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val repo = RemoteMenuRepository(client(HttpStatusCode.OK, DETAIL_SAMPLE, seen))
+
+        val detail = repo.menu("10000000-0000-4000-8000-000000000002")
+
+        val request = seen.single()
+        assertEquals(io.ktor.http.HttpMethod.Get, request.method)
+        assertEquals("/functions/v1/api-v1/menus/10000000-0000-4000-8000-000000000002", request.url.encodedPath)
+        assertEquals("Bearer jwt-token", request.headers[HttpHeaders.Authorization])
+
+        val menu = detail.menu
+        assertEquals(Instant.parse("2026-09-29T17:20:34.728Z"), detail.serverNow)
+        assertEquals(3, menu.reports.size)
+        assertEquals(co.edu.uniandes.unieat.core.model.ReportKind.LOCATION, menu.reports[0].kind)
+        assertNull(menu.reports[0].resolvedAt)
+        assertEquals(Instant.parse("2026-09-29T17:15:00.000Z"), menu.reports[1].resolvedAt)
+
+        // Contract → BQ-05: only the pending location report counts; the missing photo is flagged.
+        val guidance = co.edu.uniandes.unieat.core.decision.locationGuidance(menu)
+        assertEquals(1, guidance.pendingLocationReports)
+        assertEquals(setOf(co.edu.uniandes.unieat.core.decision.LocationReference.PHOTO), guidance.missing)
+        assertEquals(Instant.parse("2026-09-29T16:34:11.216Z"), guidance.updatedAt)
+    }
+
+    @Test
     fun errorEnvelopeBecomesApiException() = runTest {
         val body = """{"error":{"code":"GONE","message":"Este menú ya venció","traceId":"t-1",
             "details":{"status":"expired","version":1,"validUntil":"2026-09-30T05:19:11.216Z","closedAt":null}}}"""
@@ -157,6 +183,41 @@ class ApiContractTest {
     }
 
     private companion object {
+        /** GET /menus/:id 200 per docs/api-v1.md (BQ-04): DailyMenu + status, explanation and reports. */
+        const val DETAIL_SAMPLE = """
+        {
+          "serverNow": "2026-09-29T17:20:34.728Z",
+          "fetchedAt": "2026-09-29T17:20:34.728Z",
+          "menu": {
+            "id": "10000000-0000-4000-8000-000000000002",
+            "title": "Tazón completo",
+            "version": 1, "currentVersion": 1,
+            "validUntil": "2026-09-30T05:19:11.216Z",
+            "publishedAt": "2026-09-29T16:34:11.216Z",
+            "closedAt": null,
+            "establishmentId": "e0000000-0000-4000-8000-000000000002",
+            "establishmentName": "Bowls Centro Cívico",
+            "area": "Centro",
+            "address": "Carrera 1 #18A-70",
+            "entranceDescription": "Local junto a la esquina del bloque B",
+            "latitude": 4.6036, "longitude": -74.064,
+            "photoUrl": null,
+            "paymentMethods": ["Nequi", "Tarjeta"],
+            "isVerified": false,
+            "items": [{"id":"45ef039d-0000-4000-8000-000000000000","name":"Tazón de hummus","description":"",
+                       "category":"Almuerzo","priceCop":12000,"dietaryTags":[],"dietaryKnown":true}],
+            "lowestPriceCop": 12000,
+            "waitMinutes": null, "waitSampleCount": 1, "waitNewestReportAt": "2026-09-29T17:09:11.216Z",
+            "pendingReports": 2, "status": "active", "relevanceScore": 0,
+            "explanation": "Menú vigente",
+            "reports": [
+              {"id":"r1","kind":"location","status":"pending","createdAt":"2026-09-29T17:10:00.000Z","resolvedAt":null},
+              {"id":"r2","kind":"location","status":"dismissed","createdAt":"2026-09-29T17:00:00.000Z","resolvedAt":"2026-09-29T17:15:00.000Z"},
+              {"id":"r3","kind":"price","status":"pending","createdAt":"2026-09-29T16:50:00.000Z","resolvedAt":null}
+            ]
+          }
+        }"""
+
         const val FEED_SAMPLE = """
         {
           "serverNow": "2026-09-29T17:20:34.728Z",
