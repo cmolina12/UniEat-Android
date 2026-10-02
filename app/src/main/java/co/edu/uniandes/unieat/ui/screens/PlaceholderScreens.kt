@@ -32,11 +32,6 @@ fun FeedScreen(onOpenMenu: (String) -> Unit) = Placeholder("Hoy", "Menús vigent
 }
 
 @Composable
-fun DetailScreen(menuId: String, onBack: () -> Unit) = Placeholder("Detalle", "GET /menus/$menuId") {
-    SolidButton("Volver", onClick = onBack, color = Palette.Yellow)
-}
-
-@Composable
 fun RecommendScreen(onOpenMenu: (String) -> Unit) =
     Placeholder("Elige por mí", "Primer menú del feed según tus filtros.") {
         SolidButton("Ver recomendación", onClick = { onOpenMenu(DEMO_MENU_ID) }, color = Palette.Green)

@@ -19,7 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import co.edu.uniandes.unieat.ui.screens.DetailScreen
+import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
 import co.edu.uniandes.unieat.ui.screens.FeedScreen
 import co.edu.uniandes.unieat.ui.screens.LoginScreen
 import co.edu.uniandes.unieat.ui.screens.PerformanceScreen
@@ -46,7 +46,14 @@ fun UniEatNavHost(navController: NavHostController = rememberNavController()) {
                 })
             }
             composable<Feed> { FeedScreen(onOpenMenu = { navController.navigate(Detail(it)) }) }
-            composable<Detail> { DetailScreen(menuId = it.toRoute<Detail>().menuId, onBack = navController::popBackStack) }
+            composable<Detail> {
+                MenuDetailScreen(
+                    menuId = it.toRoute<Detail>().menuId,
+                    onBack = navController::popBackStack,
+                    // Swaps the current detail for another one (debug fixture picker).
+                    onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
+                )
+            }
             composable<Recommend> { RecommendScreen(onOpenMenu = { navController.navigate(Detail(it)) }) }
             composable<Publish> { PublishScreen() }
             composable<Performance> { PerformanceScreen() }
