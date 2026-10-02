@@ -4,6 +4,7 @@ import co.edu.uniandes.unieat.core.model.BatchResponse
 import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,6 +19,7 @@ import java.time.Duration
 import java.time.Instant
 
 /** Queue, uploader and tracker together, on the JVM with a real file in a temp folder. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class EventPipelineTest {
 
     @get:Rule val tmp = TemporaryFolder()

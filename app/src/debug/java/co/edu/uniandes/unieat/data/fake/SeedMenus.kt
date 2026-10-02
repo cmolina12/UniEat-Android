@@ -31,6 +31,9 @@ object SeedMenus {
         DemoFixture(EXPIRED, "Vencido · 410"),
     )
 
+    /** The three publications that exist in backend seed.sql, for debug builds on the real API. */
+    val seedFixtures = fixtures.take(3)
+
     fun all(now: Instant): List<DailyMenu> {
         val until = now + Duration.ofHours(12)
         fun ago(minutes: Long) = now - Duration.ofMinutes(minutes)
