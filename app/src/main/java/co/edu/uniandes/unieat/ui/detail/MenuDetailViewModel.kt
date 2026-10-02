@@ -86,7 +86,13 @@ sealed interface DistanceStatus {
     data object LocationOff : DistanceStatus
     data object Searching : DistanceStatus
     data object Unavailable : DistanceStatus
-    data class Known(val proximity: Proximity, val approximate: Boolean) : DistanceStatus
+    /** [user] and [accuracyMeters] let the map draw the student's position next to the pin. */
+    data class Known(
+        val proximity: Proximity,
+        val approximate: Boolean,
+        val user: Coordinate,
+        val accuracyMeters: Float?,
+    ) : DistanceStatus
 }
 
 enum class ArrivalAnswer { CONFIRMED, DISMISSED }
@@ -276,7 +282,12 @@ class MenuDetailViewModel(
                 val precise = access.permission == LocationPermission.PRECISE
                 locationRepository.locationUpdates(precise)
                     .map<UserLocation, DistanceStatus> {
-                        DistanceStatus.Known(proximity(it.coordinate, it.accuracyMeters, pin), approximate = !precise)
+                        DistanceStatus.Known(
+                            proximity(it.coordinate, it.accuracyMeters, pin),
+                            approximate = !precise,
+                            user = it.coordinate,
+                            accuracyMeters = it.accuracyMeters,
+                        )
                     }
                     .onStart { emit(DistanceStatus.Searching) }
                     .catch { emit(DistanceStatus.Unavailable) }
