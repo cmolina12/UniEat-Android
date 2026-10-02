@@ -118,6 +118,20 @@ class MenuDetailViewModelTest {
     }
 
     @Test
+    fun openingMapsTracksLocationOpenEveryTime() = runTest(dispatcher) {
+        val tracker = RecordingTracker()
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
+        advanceUntilIdle()
+
+        vm.onOpenMaps("pin")
+        vm.onOpenMaps("address")
+
+        val opens = tracker.events.filter { it.kind == EventKind.LOCATION_OPEN }
+        assertEquals(listOf("pin", "address"), opens.map { it.source })
+        assertEquals("location_open", EventKind.LOCATION_OPEN.wireName)
+    }
+
+    @Test
     fun selectionIsTracked() = runTest(dispatcher) {
         val tracker = RecordingTracker()
         val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }

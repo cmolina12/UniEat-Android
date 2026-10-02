@@ -271,6 +271,12 @@ class MenuDetailViewModel(
         }
     }
 
+    /** Opening Google Maps from the location card (BQ-05; same event as iOS directions). One event per tap. */
+    fun onOpenMaps(source: String) {
+        val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
+        eventTracker.track(EventKind.LOCATION_OPEN, menu, SCREEN, source = source)
+    }
+
     /** "Elegir este menú" (same event as iOS). */
     fun onSelect() {
         val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return

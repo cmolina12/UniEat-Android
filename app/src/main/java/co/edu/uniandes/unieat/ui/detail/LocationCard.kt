@@ -135,14 +135,20 @@ fun LocationCard(
             when {
                 pin != null -> SolidButton(
                     "Abrir en Google Maps",
-                    onClick = { openMaps(context, pin, address, establishmentName) },
+                    onClick = {
+                        actions.onOpenMaps("pin")
+                        openMaps(context, pin, address, establishmentName)
+                    },
                     icon = Icons.Filled.Place,
                     color = Palette.Cyan,
                 )
                 // Without a pin, a text search for the published address is still useful.
                 address != null -> SolidButton(
                     "Buscar la dirección en Google Maps",
-                    onClick = { openMaps(context, null, address, establishmentName) },
+                    onClick = {
+                        actions.onOpenMaps("address")
+                        openMaps(context, null, address, establishmentName)
+                    },
                     icon = Icons.Filled.Place,
                     color = Palette.Cyan,
                 )
@@ -239,6 +245,6 @@ private fun LocationCardWarningsPreview() = UniEatTheme {
         establishmentName = "Arepas La Esquina",
         now = now,
         distance = DistanceStatus.PermissionNeeded,
-        actions = LocationActions({}, {}, {}, {}),
+        actions = LocationActions({}, {}, {}, {}, {}),
     )
 }
