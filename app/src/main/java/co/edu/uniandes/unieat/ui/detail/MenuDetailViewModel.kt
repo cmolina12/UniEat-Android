@@ -315,7 +315,8 @@ class MenuDetailViewModel(
                     app.container.eventTracker,
                     app.container.reportRepository,
                     isDemo = demo,
-                    fixtures = if (demo) DevDataSource.fixtures else emptyList(),
+                    // Debug chips: every fake case, or only the seed menus that exist on the backend.
+                    fixtures = if (demo) DevDataSource.fixtures else DevDataSource.seedFixtures,
                 )
             }
         }
