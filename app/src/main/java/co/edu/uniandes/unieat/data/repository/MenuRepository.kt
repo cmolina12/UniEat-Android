@@ -12,8 +12,12 @@ import co.edu.uniandes.unieat.core.model.MenuDetailResponse
  * [co.edu.uniandes.unieat.data.remote.ApiException] on failure.
  */
 interface MenuRepository {
-    /** GET /feed — ranked by rank-v1; the first item is "Elige por mí". */
-    suspend fun feed(filters: FeedFilters): FeedResponse
+    /**
+     * GET /feed — ranked by rank-v1; the first item is "Elige por mí".
+     * [origin] = the student's location as "lat,lon", so the backend can order by walking
+     * time (`travelMinutes`). Null = no permission or no fix: the feed works the same.
+     */
+    suspend fun feed(filters: FeedFilters, origin: String? = null): FeedResponse
 
     /** GET /menus/:id — current version; 410 GONE for students if closed or expired. */
     suspend fun menu(id: String): MenuDetailResponse

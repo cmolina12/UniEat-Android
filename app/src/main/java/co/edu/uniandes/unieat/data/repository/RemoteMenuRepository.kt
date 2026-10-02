@@ -15,8 +15,8 @@ import io.ktor.http.HttpMethod
 /** [MenuRepository] backed by api-v1 through [ApiClient]. */
 class RemoteMenuRepository(private val api: ApiClient) : MenuRepository {
 
-    override suspend fun feed(filters: FeedFilters): FeedResponse =
-        api.get("feed", filters.toQuery())
+    override suspend fun feed(filters: FeedFilters, origin: String?): FeedResponse =
+        api.get("feed", filters.toQuery() + ("origin" to origin))
 
     override suspend fun menu(id: String): MenuDetailResponse =
         api.get("menus/$id")

@@ -21,11 +21,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
+import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.screens.LoginScreen
 import co.edu.uniandes.unieat.ui.screens.PerformanceScreen
 import co.edu.uniandes.unieat.ui.screens.ProfileScreen
 import co.edu.uniandes.unieat.ui.screens.PublishScreen
-import co.edu.uniandes.unieat.ui.screens.RecommendScreen
 import co.edu.uniandes.unieat.ui.theme.Palette
 
 /** App navigation graph: Login → tabs (Feed, Recommend, Publish, Performance, Profile) → Detail. */
@@ -60,7 +60,12 @@ fun UniEatNavHost(navController: NavHostController = rememberNavController()) {
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
                 )
             }
-            composable<Recommend> { RecommendScreen(onOpenMenu = { navController.navigate(Detail(it)) }) }
+            composable<Recommend> {
+                RecommendScreen(
+                    onOpenMenu = { navController.navigate(Detail(it)) },
+                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                )
+            }
             composable<Publish> { PublishScreen() }
             composable<Performance> { PerformanceScreen() }
             composable<Profile> {

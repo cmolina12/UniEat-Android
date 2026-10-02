@@ -57,6 +57,7 @@ class ApiContractTest {
         assertEquals("/functions/v1/api-v1/feed", request.url.encodedPath)
         assertEquals("15000", request.url.parameters["budgetCop"])
         assertNull(request.url.parameters["paymentMethod"])
+        assertNull(request.url.parameters["origin"]) // no location: the param is simply omitted
 
         val menu = feed.menus.single()
         assertEquals(Instant.parse("2026-09-29T17:20:34.728Z"), feed.serverNow)
@@ -95,6 +96,16 @@ class ApiContractTest {
         assertEquals(1, guidance.pendingLocationReports)
         assertEquals(setOf(co.edu.uniandes.unieat.core.decision.LocationReference.PHOTO), guidance.missing)
         assertEquals(Instant.parse("2026-09-29T16:34:11.216Z"), guidance.updatedAt)
+    }
+
+    @Test
+    fun feedSendsTheOriginCoordinateWhenAvailable() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val repo = RemoteMenuRepository(client(HttpStatusCode.OK, FEED_SAMPLE, seen))
+
+        repo.feed(FeedFilters(), origin = "4.6028,-74.0652")
+
+        assertEquals("4.6028,-74.0652", seen.single().url.parameters["origin"])
     }
 
     @Test

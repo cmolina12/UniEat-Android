@@ -135,7 +135,7 @@ class MenuDetailViewModelTest {
 
     internal class StubRepository(private val detail: suspend () -> MenuDetailResponse) : MenuRepository {
         override suspend fun menu(id: String) = detail()
-        override suspend fun feed(filters: FeedFilters): FeedResponse = error("unused")
+        override suspend fun feed(filters: FeedFilters, origin: String?): FeedResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")
         override suspend fun publish(body: MenuBody): DailyMenu = error("unused")
         override suspend fun revise(id: String, body: MenuBody): DailyMenu = error("unused")

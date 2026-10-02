@@ -18,20 +18,12 @@ import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 
 // Placeholder destinations. Each one moves to its own feature package with a ViewModel when built.
-// The Feed ("Hoy") already lives in ui/feed.
-
-private const val DEMO_MENU_ID = "10000000-0000-4000-8000-000000000002"
+// The Feed ("Hoy") and "Elige por mí" already live in ui/feed.
 
 @Composable
 fun LoginScreen(onSignedIn: () -> Unit) = Placeholder("Ingresar", "Inicio de sesión con Supabase Auth.") {
     SolidButton("Entrar (demo)", onClick = onSignedIn)
 }
-
-@Composable
-fun RecommendScreen(onOpenMenu: (String) -> Unit) =
-    Placeholder("Elige por mí", "Primer menú del feed según tus filtros.") {
-        SolidButton("Ver recomendación", onClick = { onOpenMenu(DEMO_MENU_ID) }, color = Palette.Green)
-    }
 
 @Composable
 fun PublishScreen() = Placeholder("Publicar", "Crear o editar el menú del día (POST/PUT /menus).")
@@ -62,4 +54,4 @@ private fun Placeholder(title: String, description: String, actions: @Composable
 
 @Preview(showBackground = true, backgroundColor = 0xFFF5F0E6)
 @Composable
-private fun PlaceholderPreview() = UniEatTheme { RecommendScreen(onOpenMenu = {}) }
+private fun PlaceholderPreview() = UniEatTheme { LoginScreen(onSignedIn = {}) }
