@@ -71,6 +71,8 @@ class ApiClient(
             http.request("${config.apiBaseUrl}/${path.trimStart('/')}") {
                 this.method = method
                 header("apikey", config.publishableKey)
+                // Lets the server attribute reports, feed and detail requests to Android (not "unknown").
+                header(PLATFORM_HEADER, PLATFORM)
                 token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 query.forEach { (name, value) -> if (value != null) parameter(name, value) }
                 configure()
@@ -102,6 +104,9 @@ class ApiClient(
     }
 
     companion object {
+        const val PLATFORM_HEADER = "X-UniEat-Platform"
+        const val PLATFORM = "android"
+
         fun defaultHttpClient(): HttpClient = HttpClient(OkHttp) {
             expectSuccess = false
             install(ContentNegotiation) { json(UniEatJson) }

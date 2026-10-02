@@ -54,6 +54,7 @@ class ApiContractTest {
         val request = seen.single()
         assertEquals("sb_publishable_test", request.headers["apikey"])
         assertEquals("Bearer jwt-token", request.headers[HttpHeaders.Authorization])
+        assertEquals("android", request.headers["X-UniEat-Platform"])
         assertEquals("/functions/v1/api-v1/feed", request.url.encodedPath)
         assertEquals("15000", request.url.parameters["budgetCop"])
         assertNull(request.url.parameters["paymentMethod"])
