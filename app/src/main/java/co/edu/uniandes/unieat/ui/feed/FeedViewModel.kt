@@ -12,19 +12,14 @@ import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
-import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
-import co.edu.uniandes.unieat.ui.detail.LocationPermission
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Duration
 import java.time.Instant
 
@@ -57,7 +52,6 @@ class FeedViewModel(
     private val repository: MenuRepository,
     private val eventTracker: EventTracker,
     private val sharedFilters: MutableStateFlow<FeedFilters>,
-    private val locationRepository: LocationRepository,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
 
@@ -67,9 +61,6 @@ class FeedViewModel(
     /** Current filters, for the sheet and the summary. */
     val filters: StateFlow<FeedFilters> = sharedFilters.asStateFlow()
 
-    /** Runtime permission as the screen reports it on every resume. */
-    private val permission = MutableStateFlow(LocationPermission.NONE)
-
     private val _recommendationIndex = MutableStateFlow(0)
     val recommendationIndex: StateFlow<Int> = _recommendationIndex.asStateFlow()
 
@@ -77,22 +68,15 @@ class FeedViewModel(
     private val impressed = mutableSetOf<String>()
 
     init {
-        // Context-aware: a change in filters or in the location permission reloads;
-        // collectLatest drops a request whose parameters are already stale.
+        // Every filter change reloads; collectLatest drops a request whose filters are stale.
         viewModelScope.launch {
-            combine(sharedFilters, permission) { f, p -> f to p }
-                .collectLatest { (f, p) -> fetch(f, p) }
+            sharedFilters.collectLatest { fetch(it) }
         }
     }
 
     /** Retry with the current filters. */
     fun load() {
-        viewModelScope.launch { fetch(sharedFilters.value, permission.value) }
-    }
-
-    /** Checked by the screen on resume; granting permission in settings reloads with `origin`. */
-    fun onLocationPermissionChecked(value: LocationPermission) {
-        permission.value = value // StateFlow ignores repeats, so a plain resume does not reload
+        viewModelScope.launch { fetch(sharedFilters.value) }
     }
 
     /** From the filters sheet. The shared flow emits and both tabs reload. */
@@ -109,11 +93,11 @@ class FeedViewModel(
     }
 
     /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
-    private suspend fun fetch(filters: FeedFilters, permission: LocationPermission) {
+    private suspend fun fetch(filters: FeedFilters) {
         _state.value = FeedUiState.Loading
         _recommendationIndex.value = 0 // a new load starts again at the backend's best option
         _state.value = try {
-            val response = repository.feed(filters, origin(permission))
+            val response = repository.feed(filters)
             FeedUiState.Content(
                 menus = response.menus.filter { it.closedAt == null && it.isActive(response.serverNow) },
                 clockOffset = Duration.between(deviceClock(), response.serverNow),
@@ -130,38 +114,13 @@ class FeedViewModel(
         }
     }
 
-    /**
-     * Sensor: one quick GPS fix as "lat,lon" so the backend can order by walking time.
-     * Null when there is no permission, location is off, or no fix arrives in time —
-     * in every one of those contexts the feed simply loads without `origin`.
-     */
-    private suspend fun origin(permission: LocationPermission): String? {
-        if (permission == LocationPermission.NONE) return null
-        if (!locationRepository.locationEnabled().first()) return null
-        return try {
-            withTimeoutOrNull(ORIGIN_TIMEOUT_MILLIS) {
-                locationRepository.locationUpdates(precise = permission == LocationPermission.PRECISE).first()
-            }?.let { "${it.coordinate.latitude},${it.coordinate.longitude}" }
-        } catch (e: SecurityException) {
-            null // permission revoked between the check and the fix
-        }
-    }
-
     companion object {
         private const val SCREEN = "feed"
-
-        /** The feed never waits longer than this for the GPS. */
-        private const val ORIGIN_TIMEOUT_MILLIS = 2_000L
 
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                FeedViewModel(
-                    app.container.menuRepository,
-                    app.container.eventTracker,
-                    app.container.feedFilters,
-                    app.container.locationRepository,
-                )
+                FeedViewModel(app.container.menuRepository, app.container.eventTracker, app.container.feedFilters)
             }
         }
     }
