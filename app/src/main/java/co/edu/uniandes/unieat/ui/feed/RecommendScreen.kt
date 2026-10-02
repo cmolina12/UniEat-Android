@@ -49,6 +49,7 @@ fun RecommendScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()
     val index by viewModel.recommendationIndex.collectAsStateWithLifecycle()
+    val strategy by viewModel.strategy.collectAsStateWithLifecycle()
     val container = (LocalContext.current.applicationContext as UniEatApplication).container
 
     LaunchedEffect(state) {
@@ -77,11 +78,19 @@ fun RecommendScreen(
             ) { SolidButton("Reintentar", onClick = viewModel::load, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
             is FeedUiState.Content -> {
                 val content = state as FeedUiState.Content
-                val recommended = content.recommendation(index)
+                // Strategy pattern: the active criterion picks among the backend's options
+                val recommended = strategy.pick(content.menus, index)
                 if (recommended == null) {
                     EmptyFeedCard()
                 } else {
                     FiltersSummaryCard(filters, content.menus.size)
+                    Text("Criterio", style = MaterialTheme.typography.titleMedium, color = Palette.Ink)
+                    ChipRow(
+                        options = listOf(BestRankedStrategy, CheapestStrategy),
+                        isSelected = { it == strategy },
+                        label = { it.label },
+                        onSelect = viewModel::selectStrategy,
+                    )
                     Text("Hoy prueba aquí", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
                     Text(
                         "La opción cumple tus filtros declarados. Revisa la información estimada antes de ir.",

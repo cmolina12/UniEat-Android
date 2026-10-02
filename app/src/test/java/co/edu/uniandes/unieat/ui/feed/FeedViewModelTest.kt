@@ -157,14 +157,41 @@ class FeedViewModelTest {
     }
 
     @Test
-    fun recommendationFollowsTheBackendOrderAndWrapsAround() = runTest(dispatcher) {
-        val content = FeedUiState.Content(listOf(menu("a"), menu("b")), Duration.ZERO)
+    fun bestRankedStrategyFollowsTheBackendOrderAndWrapsAround() {
+        val menus = listOf(menu("a"), menu("b"))
 
-        assertEquals(menu("a"), content.recommendation(0)) // backend's best option
-        assertEquals(menu("b"), content.recommendation(1))
-        assertEquals(menu("a"), content.recommendation(2)) // wraps around
+        assertEquals(menu("a"), BestRankedStrategy.pick(menus, 0)) // backend's best option
+        assertEquals(menu("b"), BestRankedStrategy.pick(menus, 1))
+        assertEquals(menu("a"), BestRankedStrategy.pick(menus, 2)) // wraps around
 
-        assertNull(FeedUiState.Content(emptyList(), Duration.ZERO).recommendation(0))
+        assertNull(BestRankedStrategy.pick(emptyList(), 0))
+    }
+
+    @Test
+    fun cheapestStrategyPicksTheLowestPriceFirst() {
+        val cheap = menu("cheap").copy(lowestPriceCop = 8_000)
+        val mid = menu("mid").copy(lowestPriceCop = 12_000)
+        val pricey = menu("pricey").copy(lowestPriceCop = 15_000)
+        val menus = listOf(mid, pricey, cheap) // backend order by rank, not by price
+
+        assertEquals(cheap, CheapestStrategy.pick(menus, 0))
+        assertEquals(mid, CheapestStrategy.pick(menus, 1))
+        assertEquals(cheap, CheapestStrategy.pick(menus, 3)) // wraps around
+
+        assertNull(CheapestStrategy.pick(emptyList(), 0))
+    }
+
+    @Test
+    fun selectStrategyChangesTheCriterionAndResetsTheIndex() = runTest(dispatcher) {
+        val vm = viewModel { feedResponse(listOf(menu("a"), menu("b"))) }
+        advanceUntilIdle()
+        vm.nextRecommendation()
+        assertEquals(1, vm.recommendationIndex.value)
+
+        vm.selectStrategy(CheapestStrategy)
+
+        assertEquals(CheapestStrategy, vm.strategy.value)
+        assertEquals(0, vm.recommendationIndex.value) // back to that criterion's best option
     }
 
     @Test

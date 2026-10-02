@@ -31,11 +31,7 @@ sealed interface FeedUiState {
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
      */
-    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration) : FeedUiState {
-        /** "Elige por mí": position [index] of the backend ranking, wrapping around at the end. */
-        fun recommendation(index: Int): DailyMenu? =
-            if (menus.isEmpty()) null else menus[index % menus.size]
-    }
+    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration) : FeedUiState
 
     /** AUTH_REQUIRED: the screen navigates back to the login. */
     data object SessionExpired : FeedUiState
@@ -64,6 +60,10 @@ class FeedViewModel(
     private val _recommendationIndex = MutableStateFlow(0)
     val recommendationIndex: StateFlow<Int> = _recommendationIndex.asStateFlow()
 
+    // Strategy pattern: the active criterion for "Elige por mí".
+    private val _strategy = MutableStateFlow<RecommendationStrategy>(BestRankedStrategy)
+    val strategy: StateFlow<RecommendationStrategy> = _strategy.asStateFlow()
+
     /** feed_impression once per menu per session, like the iOS `impressions` set. */
     private val impressed = mutableSetOf<String>()
 
@@ -84,8 +84,14 @@ class FeedViewModel(
         sharedFilters.value = filters
     }
 
-    /** "Elegir otra opción": move to the next menu of the ranking. */
+    /** "Elegir otra opción": move to the next menu of the active criterion. */
     fun nextRecommendation() = _recommendationIndex.update { it + 1 }
+
+    /** Switch the recommendation criterion and start again at its best option. */
+    fun selectStrategy(strategy: RecommendationStrategy) {
+        _strategy.value = strategy
+        _recommendationIndex.value = 0
+    }
 
     /** Tracked from the screen when a card actually becomes visible; retries never double-count. */
     fun onMenuShown(menu: DailyMenu) {

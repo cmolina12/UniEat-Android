@@ -119,7 +119,7 @@ private fun SectionTitle(text: String) {
 /** One row of selectable chips, same look as the fixture picker in the detail screen. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ChipRow(
+internal fun <T> ChipRow(
     options: List<T>,
     isSelected: (T) -> Boolean,
     label: (T) -> String,
