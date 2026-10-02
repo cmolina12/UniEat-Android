@@ -1,6 +1,5 @@
 package co.edu.uniandes.unieat.ui.feed
 
-import co.edu.uniandes.unieat.core.decision.Coordinate
 import co.edu.uniandes.unieat.core.model.CloseResponse
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.FeedFilters
@@ -8,12 +7,9 @@ import co.edu.uniandes.unieat.core.model.FeedResponse
 import co.edu.uniandes.unieat.core.model.MenuBody
 import co.edu.uniandes.unieat.core.model.MenuDetailResponse
 import co.edu.uniandes.unieat.data.analytics.EventKind
-import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
-import co.edu.uniandes.unieat.ui.detail.LocationPermission
 import co.edu.uniandes.unieat.ui.detail.RecordingTracker
-import co.edu.uniandes.unieat.ui.detail.StubLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,16 +39,15 @@ class FeedViewModelTest {
     private fun viewModel(
         tracker: RecordingTracker = RecordingTracker(),
         sharedFilters: MutableStateFlow<FeedFilters> = MutableStateFlow(FeedFilters()),
-        location: StubLocation = StubLocation(),
         deviceClock: () -> Instant = { serverNow },
-        feed: suspend (FeedFilters, String?) -> FeedResponse,
-    ) = FeedViewModel(StubRepository(feed), tracker, sharedFilters, location, deviceClock)
+        feed: suspend (FeedFilters) -> FeedResponse,
+    ) = FeedViewModel(StubRepository(feed), tracker, sharedFilters, deviceClock)
 
     @Test
     fun startsLoadingThenShowsMenusInBackendOrder() = runTest(dispatcher) {
         val menus = listOf(menu("a"), menu("b"), menu("c"))
         // Device clock 90 s behind the server, like the detail test.
-        val vm = viewModel(deviceClock = { serverNow - Duration.ofSeconds(90) }) { _, _ -> feedResponse(menus) }
+        val vm = viewModel(deviceClock = { serverNow - Duration.ofSeconds(90) }) { feedResponse(menus) }
         assertEquals(FeedUiState.Loading, vm.state.value)
 
         advanceUntilIdle()
@@ -66,7 +61,7 @@ class FeedViewModelTest {
         val active = menu("active")
         val expired = menu("expired").copy(validUntil = serverNow - Duration.ofMinutes(5))
         val closed = menu("closed").copy(closedAt = serverNow - Duration.ofMinutes(5))
-        val vm = viewModel { _, _ -> feedResponse(listOf(expired, active, closed)) }
+        val vm = viewModel { feedResponse(listOf(expired, active, closed)) }
 
         advanceUntilIdle()
 
@@ -75,7 +70,7 @@ class FeedViewModelTest {
 
     @Test
     fun emptyFeedBecomesEmptyContent() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> feedResponse(emptyList()) }
+        val vm = viewModel { feedResponse(emptyList()) }
         advanceUntilIdle()
         assertEquals(emptyList<DailyMenu>(), (vm.state.value as FeedUiState.Content).menus)
     }
@@ -83,7 +78,7 @@ class FeedViewModelTest {
     @Test
     fun failureBecomesErrorAndRetryReloads() = runTest(dispatcher) {
         var calls = 0
-        val vm = viewModel { _, _ ->
+        val vm = viewModel {
             calls++
             if (calls == 1) throw ApiException.unexpected(500) else feedResponse(listOf(menu("a")))
         }
@@ -98,7 +93,7 @@ class FeedViewModelTest {
 
     @Test
     fun offlineBecomesAClearError() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> throw ApiException.offline() }
+        val vm = viewModel { throw ApiException.offline() }
         advanceUntilIdle()
         assertEquals(
             FeedUiState.Error("Sin conexión. Revisa tu internet e inténtalo de nuevo.", ApiException.OFFLINE),
@@ -108,7 +103,7 @@ class FeedViewModelTest {
 
     @Test
     fun authRequiredBecomesSessionExpired() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> throw ApiException.authRequired() }
+        val vm = viewModel { throw ApiException.authRequired() }
         advanceUntilIdle()
         assertEquals(FeedUiState.SessionExpired, vm.state.value)
     }
@@ -117,7 +112,7 @@ class FeedViewModelTest {
     fun initialLoadUsesTheSharedFilters() = runTest(dispatcher) {
         val seen = mutableListOf<FeedFilters>()
         val filters = MutableStateFlow(FeedFilters(budgetCop = 15_000, diet = "vegetarian"))
-        viewModel(sharedFilters = filters) { f, _ ->
+        viewModel(sharedFilters = filters) { f ->
             seen += f
             feedResponse(emptyList())
         }
@@ -129,7 +124,7 @@ class FeedViewModelTest {
     @Test
     fun applyFiltersReloadsWithTheNewOnes() = runTest(dispatcher) {
         val seen = mutableListOf<FeedFilters>()
-        val vm = viewModel { f, _ ->
+        val vm = viewModel { f ->
             seen += f
             feedResponse(listOf(menu("a")))
         }
@@ -148,8 +143,8 @@ class FeedViewModelTest {
         // Both tabs ("Hoy" and "Elige por mí") observe the same shared filters flow.
         val shared = MutableStateFlow(FeedFilters())
         val seenByOther = mutableListOf<FeedFilters>()
-        val feedTab = viewModel(sharedFilters = shared) { _, _ -> feedResponse(listOf(menu("a"))) }
-        viewModel(sharedFilters = shared) { f, _ ->
+        val feedTab = viewModel(sharedFilters = shared) { feedResponse(listOf(menu("a"))) }
+        viewModel(sharedFilters = shared) { f ->
             seenByOther += f
             feedResponse(listOf(menu("a")))
         }
@@ -162,19 +157,46 @@ class FeedViewModelTest {
     }
 
     @Test
-    fun recommendationFollowsTheBackendOrderAndWrapsAround() = runTest(dispatcher) {
-        val content = FeedUiState.Content(listOf(menu("a"), menu("b")), Duration.ZERO)
+    fun bestRankedStrategyFollowsTheBackendOrderAndWrapsAround() {
+        val menus = listOf(menu("a"), menu("b"))
 
-        assertEquals(menu("a"), content.recommendation(0)) // backend's best option
-        assertEquals(menu("b"), content.recommendation(1))
-        assertEquals(menu("a"), content.recommendation(2)) // wraps around
+        assertEquals(menu("a"), BestRankedStrategy.pick(menus, 0)) // backend's best option
+        assertEquals(menu("b"), BestRankedStrategy.pick(menus, 1))
+        assertEquals(menu("a"), BestRankedStrategy.pick(menus, 2)) // wraps around
 
-        assertNull(FeedUiState.Content(emptyList(), Duration.ZERO).recommendation(0))
+        assertNull(BestRankedStrategy.pick(emptyList(), 0))
+    }
+
+    @Test
+    fun cheapestStrategyPicksTheLowestPriceFirst() {
+        val cheap = menu("cheap").copy(lowestPriceCop = 8_000)
+        val mid = menu("mid").copy(lowestPriceCop = 12_000)
+        val pricey = menu("pricey").copy(lowestPriceCop = 15_000)
+        val menus = listOf(mid, pricey, cheap) // backend order by rank, not by price
+
+        assertEquals(cheap, CheapestStrategy.pick(menus, 0))
+        assertEquals(mid, CheapestStrategy.pick(menus, 1))
+        assertEquals(cheap, CheapestStrategy.pick(menus, 3)) // wraps around
+
+        assertNull(CheapestStrategy.pick(emptyList(), 0))
+    }
+
+    @Test
+    fun selectStrategyChangesTheCriterionAndResetsTheIndex() = runTest(dispatcher) {
+        val vm = viewModel { feedResponse(listOf(menu("a"), menu("b"))) }
+        advanceUntilIdle()
+        vm.nextRecommendation()
+        assertEquals(1, vm.recommendationIndex.value)
+
+        vm.selectStrategy(CheapestStrategy)
+
+        assertEquals(CheapestStrategy, vm.strategy.value)
+        assertEquals(0, vm.recommendationIndex.value) // back to that criterion's best option
     }
 
     @Test
     fun nextRecommendationAdvancesAndANewLoadResetsIt() = runTest(dispatcher) {
-        val vm = viewModel { _, _ -> feedResponse(listOf(menu("a"), menu("b"))) }
+        val vm = viewModel { feedResponse(listOf(menu("a"), menu("b"))) }
         advanceUntilIdle()
 
         vm.nextRecommendation()
@@ -187,86 +209,11 @@ class FeedViewModelTest {
     }
 
     @Test
-    fun originIsSentWhenPermissionGrantedAndFixAvailable() = runTest(dispatcher) {
-        val seenOrigins = mutableListOf<String?>()
-        val location = StubLocation()
-        location.fixes.emit(UserLocation(Coordinate(4.6028, -74.0652), accuracyMeters = 10f))
-        val vm = viewModel(location = location) { _, origin ->
-            seenOrigins += origin
-            feedResponse(listOf(menu("a")))
-        }
-        vm.onLocationPermissionChecked(LocationPermission.PRECISE)
-        advanceUntilIdle()
-
-        assertEquals("4.6028,-74.0652", seenOrigins.last())
-        assertEquals(true, location.lastPrecise)
-    }
-
-    @Test
-    fun withoutPermissionTheFeedLoadsWithoutOrigin() = runTest(dispatcher) {
-        val seenOrigins = mutableListOf<String?>()
-        val location = StubLocation()
-        viewModel(location = location) { _, origin ->
-            seenOrigins += origin
-            feedResponse(listOf(menu("a")))
-        }
-        advanceUntilIdle()
-
-        assertEquals(listOf(null as String?), seenOrigins)
-        assertEquals(0, location.collectors) // the GPS is never even started
-    }
-
-    @Test
-    fun locationTurnedOffLoadsWithoutOrigin() = runTest(dispatcher) {
-        val seenOrigins = mutableListOf<String?>()
-        val location = StubLocation(enabled = false)
-        val vm = viewModel(location = location) { _, origin ->
-            seenOrigins += origin
-            feedResponse(listOf(menu("a")))
-        }
-        vm.onLocationPermissionChecked(LocationPermission.PRECISE)
-        advanceUntilIdle()
-
-        assertNull(seenOrigins.last())
-        assertEquals(0, location.collectors)
-    }
-
-    @Test
-    fun fixNotArrivingInTimeStillLoadsTheFeed() = runTest(dispatcher) {
-        val seenOrigins = mutableListOf<String?>()
-        val location = StubLocation() // enabled, but never emits a fix: the 2 s timeout wins
-        val vm = viewModel(location = location) { _, origin ->
-            seenOrigins += origin
-            feedResponse(listOf(menu("a")))
-        }
-        vm.onLocationPermissionChecked(LocationPermission.PRECISE)
-        advanceUntilIdle()
-
-        assertNull(seenOrigins.last())
-        assertEquals(listOf(menu("a")), (vm.state.value as FeedUiState.Content).menus)
-    }
-
-    @Test
-    fun recheckingTheSamePermissionDoesNotReload() = runTest(dispatcher) {
-        var calls = 0
-        val vm = viewModel { _, _ ->
-            calls++
-            feedResponse(listOf(menu("a")))
-        }
-        advanceUntilIdle()
-
-        vm.onLocationPermissionChecked(LocationPermission.NONE) // every resume reports again
-        advanceUntilIdle()
-
-        assertEquals(1, calls)
-    }
-
-    @Test
     fun impressionIsTrackedOncePerMenu() = runTest(dispatcher) {
         val tracker = RecordingTracker()
         val a = menu("a").copy(version = 2)
         val b = menu("b")
-        val vm = viewModel(tracker = tracker) { _, _ -> feedResponse(listOf(a, b)) }
+        val vm = viewModel(tracker = tracker) { feedResponse(listOf(a, b)) }
         advanceUntilIdle()
 
         vm.onMenuShown(a)
@@ -291,8 +238,8 @@ class FeedViewModelTest {
         establishmentName = "Local $id", area = "Centro", lowestPriceCop = 12_000,
     )
 
-    internal class StubRepository(private val onFeed: suspend (FeedFilters, String?) -> FeedResponse) : MenuRepository {
-        override suspend fun feed(filters: FeedFilters, origin: String?): FeedResponse = onFeed(filters, origin)
+    internal class StubRepository(private val onFeed: suspend (FeedFilters) -> FeedResponse) : MenuRepository {
+        override suspend fun feed(filters: FeedFilters): FeedResponse = onFeed(filters)
         override suspend fun menu(id: String): MenuDetailResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")
         override suspend fun publish(body: MenuBody): DailyMenu = error("unused")
