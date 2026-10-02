@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import co.edu.uniandes.unieat.DemoFixture
+import co.edu.uniandes.unieat.DevDataSource
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.decision.Coordinate
 import co.edu.uniandes.unieat.core.decision.LocationGuidance
@@ -86,7 +88,13 @@ sealed interface DistanceStatus {
     data object LocationOff : DistanceStatus
     data object Searching : DistanceStatus
     data object Unavailable : DistanceStatus
-    data class Known(val proximity: Proximity, val approximate: Boolean) : DistanceStatus
+    /** [user] and [accuracyMeters] let the map draw the student's position next to the pin. */
+    data class Known(
+        val proximity: Proximity,
+        val approximate: Boolean,
+        val user: Coordinate,
+        val accuracyMeters: Float?,
+    ) : DistanceStatus
 }
 
 enum class ArrivalAnswer { CONFIRMED, DISMISSED }
@@ -115,6 +123,10 @@ class MenuDetailViewModel(
     private val locationRepository: LocationRepository,
     private val eventTracker: EventTracker,
     private val reportRepository: ReportRepository,
+    /** True when the app runs on debug fake data; the screen shows a notice. */
+    val isDemo: Boolean = false,
+    /** Debug-only sample menus to jump between (empty with real data and in release). */
+    val fixtures: List<DemoFixture> = emptyList(),
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
 
@@ -276,7 +288,12 @@ class MenuDetailViewModel(
                 val precise = access.permission == LocationPermission.PRECISE
                 locationRepository.locationUpdates(precise)
                     .map<UserLocation, DistanceStatus> {
-                        DistanceStatus.Known(proximity(it.coordinate, it.accuracyMeters, pin), approximate = !precise)
+                        DistanceStatus.Known(
+                            proximity(it.coordinate, it.accuracyMeters, pin),
+                            approximate = !precise,
+                            user = it.coordinate,
+                            accuracyMeters = it.accuracyMeters,
+                        )
                     }
                     .onStart { emit(DistanceStatus.Searching) }
                     .catch { emit(DistanceStatus.Unavailable) }
@@ -290,12 +307,16 @@ class MenuDetailViewModel(
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
+                val demo = app.container.usesFakeData
                 MenuDetailViewModel(
                     menuId,
                     app.container.menuRepository,
                     app.container.locationRepository,
                     app.container.eventTracker,
                     app.container.reportRepository,
+                    isDemo = demo,
+                    // Debug chips: every fake case, or only the seed menus that exist on the backend.
+                    fixtures = if (demo) DevDataSource.fixtures else DevDataSource.seedFixtures,
                 )
             }
         }

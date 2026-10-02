@@ -54,6 +54,29 @@ class LocationGuidanceTest {
     }
 
     @Test
+    fun onlyTheAddressMissing() {
+        val guidance = locationGuidance(menu(address = "", photoUrl = "https://cdn.test/p.jpg"))
+        assertEquals(setOf(ADDRESS), guidance.missing)
+        assertEquals(setOf(PIN, PHOTO, ENTRANCE), guidance.available)
+        assertTrue(guidance.needsWarning)
+    }
+
+    @Test
+    fun onlyTheEntranceMissing() {
+        val guidance = locationGuidance(menu(entrance = "  ", photoUrl = "https://cdn.test/p.jpg"))
+        assertEquals(setOf(ENTRANCE), guidance.missing)
+        assertEquals(setOf(PIN, PHOTO, ADDRESS), guidance.available)
+        assertTrue(guidance.needsWarning)
+    }
+
+    @Test
+    fun onlyThePinMissing() {
+        val guidance = locationGuidance(menu(latitude = null, longitude = null, photoUrl = "https://cdn.test/p.jpg"))
+        assertEquals(setOf(PIN), guidance.missing)
+        assertTrue(guidance.needsWarning)
+    }
+
+    @Test
     fun textIsTrimmed() {
         val guidance = locationGuidance(menu(address = "  Calle 19 #1-21 "))
         assertEquals("Calle 19 #1-21", guidance.address)

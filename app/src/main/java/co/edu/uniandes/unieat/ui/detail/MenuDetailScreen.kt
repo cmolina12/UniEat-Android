@@ -61,8 +61,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.DemoFixture
-import co.edu.uniandes.unieat.DevDataSource
-import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.decision.LocationGuidance
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.MenuDish
@@ -99,7 +97,6 @@ fun MenuDetailScreen(
         reportKind = kind
     }
     val context = LocalContext.current
-    val container = (context.applicationContext as UniEatApplication).container
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -123,8 +120,8 @@ fun MenuDetailScreen(
             onReportLocation = { openReport(ReportKind.LOCATION) },
         ),
         onReport = { openReport(ReportKind.UNAVAILABLE) },
-        isDemo = container.usesFakeData,
-        fixtures = if (container.usesFakeData) DevDataSource.fixtures else emptyList(),
+        isDemo = viewModel.isDemo,
+        fixtures = viewModel.fixtures,
         currentMenuId = menuId,
         onBack = onBack,
         onRetry = viewModel::load,

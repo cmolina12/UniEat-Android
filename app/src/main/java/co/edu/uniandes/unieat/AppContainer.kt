@@ -29,14 +29,18 @@ class AppContainer(
     private val context: Context,
     val config: SupabaseConfig = SupabaseConfig.fromBuildConfig(),
 ) {
-    // Replaced by the Supabase Auth session when the Login feature is built.
-    private val tokenProvider = AccessTokenProvider { throw ApiException.authRequired() }
+    // Debug builds with a backend sign in with a test account (DevTokenProvider); otherwise every
+    // request fails with AUTH_REQUIRED. Replaced by the Supabase Auth session when Login is built.
+    private val tokenProvider: AccessTokenProvider =
+        DevDataSource.tokenProvider(config) ?: AccessTokenProvider { throw ApiException.authRequired() }
 
     val apiClient: ApiClient by lazy { ApiClient(config, tokenProvider) }
 
-    private val fakeMenuRepository: MenuRepository? = if (USE_FAKE_DATA) DevDataSource.menuRepository() else null
+    // Automatic: debug builds without supabase.url in local.properties run on fake data;
+    // with a backend configured they call api-v1. Release never has fake data.
+    private val fakeMenuRepository: MenuRepository? = if (!config.isConfigured) DevDataSource.menuRepository() else null
 
-    /** True when screens run on debug fake data (seed.sql) instead of the API. Always false in release. */
+    /** True when screens run on debug fake data (seed.sql copy) instead of the API. Always false in release. */
     val usesFakeData: Boolean get() = fakeMenuRepository != null
 
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
@@ -62,13 +66,5 @@ class AppContainer(
 
     val eventTracker: EventTracker by lazy {
         QueuedEventTracker(eventQueue, flushScheduler, appScope, appVersion = BuildConfig.VERSION_NAME)
-    }
-
-    private companion object {
-        /**
-         * Switch for development: true = debug builds use FakeMenuRepository (no login needed);
-         * false = always call api-v1. Release builds ignore it because their DevDataSource is empty.
-         */
-        const val USE_FAKE_DATA = true
     }
 }

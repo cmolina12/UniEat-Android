@@ -81,14 +81,17 @@ fun LocationCard(
             if (guidance.hasUnresolvedDiscrepancies) DiscrepancyWarning(guidance.pendingLocationReports)
 
             guidance.pin?.let { pin ->
+                val known = distance as? DistanceStatus.Known
                 OsmMap(
                     pin,
                     establishmentName,
                     Modifier
                         .fillMaxWidth()
-                        .height(175.dp)
+                        .height(200.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .border(1.4.dp, Palette.Ink, RoundedCornerShape(10.dp)),
+                    user = known?.user,
+                    userAccuracyMeters = known?.accuracyMeters,
                 )
             } ?: MissingReference(LocationReference.PIN)
 
