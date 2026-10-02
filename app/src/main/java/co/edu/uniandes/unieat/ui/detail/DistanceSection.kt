@@ -46,6 +46,8 @@ data class LocationActions(
     val onArrivalAnswered: (arrived: Boolean) -> Unit,
     /** Opens the report sheet preselected on "location" (feeds the BQ-05 warning). */
     val onReportLocation: () -> Unit,
+    /** A Google Maps button was tapped; [source] is "pin" or "address" (BQ-05 location_open). */
+    val onOpenMaps: (source: String) -> Unit,
 )
 
 /**

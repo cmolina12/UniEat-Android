@@ -15,6 +15,7 @@ enum class EventKind(val wireName: String) {
     DETAIL_OPEN("detail_open"),
     SELECTION("selection"),
     ARRIVAL("arrival"),
+    LOCATION_OPEN("location_open"),
 }
 
 /**
