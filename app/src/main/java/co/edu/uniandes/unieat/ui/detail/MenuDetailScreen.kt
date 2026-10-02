@@ -48,7 +48,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +68,7 @@ import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.MenuDish
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
+import co.edu.uniandes.unieat.ui.common.rememberServerNow
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -77,7 +77,6 @@ import co.edu.uniandes.unieat.ui.theme.Sticker
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 import co.edu.uniandes.unieat.ui.theme.cop
-import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
 
@@ -199,18 +198,6 @@ private fun MenuDetailContent(
 
         if (fixtures.isNotEmpty()) FixturePicker(fixtures, currentMenuId, onOpenMenu)
     }
-}
-
-/** Server-aligned clock that ticks every minute, like iOS `TimelineView(.periodic(by: 60))`. */
-@Composable
-private fun rememberServerNow(offset: Duration): Instant {
-    val now by produceState(Instant.now() + offset, offset) {
-        while (true) {
-            delay(60_000)
-            value = Instant.now() + offset
-        }
-    }
-    return now
 }
 
 @OptIn(ExperimentalLayoutApi::class)

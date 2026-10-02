@@ -20,7 +20,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
-import co.edu.uniandes.unieat.ui.screens.FeedScreen
+import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.screens.LoginScreen
 import co.edu.uniandes.unieat.ui.screens.PerformanceScreen
 import co.edu.uniandes.unieat.ui.screens.ProfileScreen
@@ -45,7 +45,13 @@ fun UniEatNavHost(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Feed) { popUpTo<Login> { inclusive = true } }
                 })
             }
-            composable<Feed> { FeedScreen(onOpenMenu = { navController.navigate(Detail(it)) }) }
+            composable<Feed> {
+                FeedScreen(
+                    onOpenMenu = { navController.navigate(Detail(it)) },
+                    // Expired session: back to the login, clearing the whole back stack.
+                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                )
+            }
             composable<Detail> {
                 MenuDetailScreen(
                     menuId = it.toRoute<Detail>().menuId,
