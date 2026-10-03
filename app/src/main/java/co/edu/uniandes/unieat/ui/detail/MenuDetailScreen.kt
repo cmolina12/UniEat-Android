@@ -44,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -84,9 +85,14 @@ fun MenuDetailScreen(
     menuId: String,
     onBack: () -> Unit,
     onOpenMenu: (String) -> Unit,
+    onSessionExpired: () -> Unit,
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Expired session: back to the login, like the feed and "Elige por mí".
+    LaunchedEffect(state) {
+        if (state is MenuDetailUiState.SessionExpired) onSessionExpired()
+    }
     val distance by viewModel.distance.collectAsStateWithLifecycle()
     val arrival by viewModel.arrival.collectAsStateWithLifecycle()
     val report by viewModel.report.collectAsStateWithLifecycle()
@@ -185,6 +191,12 @@ private fun MenuDetailContent(
                 body = "Vuelve a la lista de menús para ver opciones vigentes.",
                 color = Palette.Coral,
                 action = { SolidButton("Volver", onClick = onBack, color = Palette.Yellow) },
+            )
+            MenuDetailUiState.SessionExpired -> StatusMessage(
+                title = "Tu sesión terminó",
+                body = "Inicia sesión de nuevo para ver el menú.",
+                color = Palette.Cyan,
+                action = {},
             )
             is MenuDetailUiState.Error -> StatusMessage(
                 title = "No pudimos abrir el menú",

@@ -110,6 +110,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onBack = navController::popBackStack,
                     // Swaps the current detail for another one (debug fixture picker).
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
+                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
                 )
             }
             composable<Recommend> {
