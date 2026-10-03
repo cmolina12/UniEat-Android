@@ -251,11 +251,12 @@ private fun MenuBody(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Sticker(menu.area, color = Palette.Cyan, icon = Icons.Filled.Place)
-        Sticker(
-            if (active) "Vigente" else "Vencido",
-            color = if (active) Palette.Green else Palette.Coral,
-            icon = if (active) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-        )
+        // Three states, like the feed: the student sees "Por vencer" before travelling to a menu about to end.
+        when (val validity = Validity.of(menu, now)) {
+            Validity.Active -> Sticker("Vigente", color = Palette.Green, icon = Icons.Filled.CheckCircle)
+            is Validity.Expiring -> Sticker("Por vencer · ${validity.minutesLeft} min", color = Palette.Yellow, icon = Icons.Filled.Warning)
+            Validity.Expired -> Sticker("Vencido", color = Palette.Coral, icon = Icons.Filled.Warning)
+        }
         if (menu.pendingReports > 0) Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
     }
 
