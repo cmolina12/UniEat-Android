@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
+import co.edu.uniandes.unieat.data.telemetry.SCOPE_THIS_DEVICE
 import co.edu.uniandes.unieat.ui.feed.FeedStatusCard
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
@@ -149,6 +150,12 @@ private fun FeedLoadingBqCard(report: FeedLoadReport?) {
             Text("Aún no hay cargas registradas en los últimos 7 días.")
             return@SurfaceCard
         }
+        val scope = if (report.scope == SCOPE_THIS_DEVICE) {
+            "Solo este dispositivo (el servidor no respondió)"
+        } else {
+            "Todos los dispositivos"
+        }
+        Text("$scope · últimos ${report.periodDays} días", style = MaterialTheme.typography.bodySmall)
         Text("${report.attempts} cargas completadas · agrupadas por conexión, dispositivo, Android y hora.")
         if (report.abandoned > 0) {
             Text(

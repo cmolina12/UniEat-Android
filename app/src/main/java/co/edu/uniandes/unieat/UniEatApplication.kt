@@ -10,5 +10,7 @@ class UniEatApplication : Application() {
         super.onCreate()
         // Events left from a previous run (e.g. closed while offline) upload once there is network.
         container.flushScheduler.schedule()
+        // Same for BQ-01 load records, including loads abandoned before the app was closed.
+        container.feedLoadScheduler.schedule()
     }
 }

@@ -15,7 +15,12 @@ import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
+import co.edu.uniandes.unieat.data.telemetry.LocalFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.RemoteFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.WorkManagerFeedLoadScheduler
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
@@ -60,8 +65,19 @@ class AppContainer(
 
     val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
 
-    /** BQ-01 technical telemetry persisted locally for the seven-day diagnostic. */
-    val feedLoadTelemetry by lazy { FeedLoadTelemetry(context) }
+    // BQ-01: FeedLoadTelemetry (disk) → WorkManager → FeedLoadUploader → POST /telemetry/feed-loads.
+    val feedLoadTelemetry: FeedLoadTelemetry by lazy {
+        FeedLoadTelemetry(context, onSettled = { feedLoadScheduler.schedule() })
+    }
+
+    val feedLoadScheduler: FlushScheduler by lazy { WorkManagerFeedLoadScheduler(context) }
+
+    val feedLoadRepository: FeedLoadRepository by lazy {
+        val local = LocalFeedLoadRepository(feedLoadTelemetry)
+        if (usesFakeData) local else RemoteFeedLoadRepository(apiClient, local)
+    }
+
+    val feedLoadUploader: FeedLoadUploader by lazy { FeedLoadUploader(feedLoadTelemetry, feedLoadRepository) }
 
     /** Feed filters shared by "Hoy" and "Elige por mí": both ViewModels observe this same flow. */
     val feedFilters = MutableStateFlow(FeedFilters())

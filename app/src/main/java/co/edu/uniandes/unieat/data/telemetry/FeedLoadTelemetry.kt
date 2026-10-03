@@ -32,10 +32,13 @@ data class FeedLoadRecord(
     val deviceModel: String,
     val osVersion: String,
     val appVersion: String,
+    /** True once the backend has the record (POST /telemetry/feed-loads); it is kept for the local report. */
+    val uploaded: Boolean = false,
 )
 
 data class FeedLoadAttempt(val loadId: String, val startedAtEpochMs: Long)
 
+@Serializable
 data class FeedLoadGroup(
     val connectionType: String,
     val deviceModel: String,
@@ -45,22 +48,44 @@ data class FeedLoadGroup(
     val failures: Int,
     val abandoned: Int,
     val failureRate: Double,
-    val p95RequestToRenderMs: Long?,
+    val p95RequestToRenderMs: Long? = null,
 )
 
+/**
+ * BQ-01 answer. The backend sends it from GET /telemetry/feed-loads/summary with
+ * [scope] = [SCOPE_ALL_DEVICES]; [FeedLoadTelemetry.report] builds the same shape from this phone only.
+ */
+@Serializable
 data class FeedLoadReport(
     val periodDays: Int,
     val attempts: Int,
     val abandoned: Int,
-    val groups: List<FeedLoadGroup>,
+    val groups: List<FeedLoadGroup> = emptyList(),
+    val scope: String = SCOPE_ALL_DEVICES,
 )
 
-/** Local analytics slice for Samuel's BQ-01. Records are persisted so the seven-day answer survives restarts. */
+const val SCOPE_ALL_DEVICES = "all_devices"
+const val SCOPE_THIS_DEVICE = "this_device"
+
+/** Records waiting to be sent to the backend. [FeedLoadTelemetry] is the real one; tests use a fake. */
+interface FeedLoadOutbox {
+    /** Settled records (rendered, failure or abandoned) not uploaded yet, oldest first. */
+    suspend fun pendingUpload(limit: Int): List<FeedLoadRecord>
+
+    /** Marks them as sent, keeping the settled outcome so a late render cannot change it. */
+    suspend fun markUploaded(records: List<FeedLoadRecord>)
+}
+
+/**
+ * BQ-01 records on the phone. They survive restarts, feed the local report and wait here until
+ * [FeedLoadUploader] sends them to the backend. [onSettled] asks for that upload.
+ */
 class FeedLoadTelemetry(
     context: Context,
     private val clock: () -> Instant = Instant::now,
     private val sessionId: String = UUID.randomUUID().toString(),
-) {
+    private val onSettled: () -> Unit = {},
+) : FeedLoadOutbox {
     private val appContext = context.applicationContext
     private val file = File(appContext.filesDir, "analytics/feed-load-telemetry.json")
     private val mutex = Mutex()
@@ -71,22 +96,59 @@ class FeedLoadTelemetry(
         base(attempt, outcome = "render_pending", requestCompleted = clock().toEpochMilli())
     )
 
-    suspend fun failure(attempt: FeedLoadAttempt, errorCode: String) = append(
-        base(attempt, outcome = "failure", requestCompleted = clock().toEpochMilli(), errorCode = errorCode)
-    )
+    suspend fun failure(attempt: FeedLoadAttempt, errorCode: String) {
+        append(base(attempt, outcome = "failure", requestCompleted = clock().toEpochMilli(), errorCode = errorCode))
+        onSettled()
+    }
 
-    suspend fun rendered(loadId: String) = withContext(Dispatchers.IO) { mutex.withLock {
-        val records = readUnsafe().toMutableList()
-        val i = records.indexOfLast { it.loadId == loadId }
-        if (i >= 0 && records[i].outcome == "render_pending") {
-            records[i] = records[i].copy(outcome = "rendered", renderedAtEpochMs = clock().toEpochMilli())
-            writeUnsafe(records)
+    suspend fun rendered(loadId: String) {
+        val updated = withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val records = readUnsafe().toMutableList()
+                val i = records.indexOfLast { it.loadId == loadId }
+                if (i >= 0 && records[i].outcome == "render_pending") {
+                    records[i] = records[i].copy(outcome = "rendered", renderedAtEpochMs = clock().toEpochMilli())
+                    writeUnsafe(records)
+                    true
+                } else {
+                    false
+                }
+            }
         }
-    } }
+        if (updated) onSettled()
+    }
 
-    suspend fun report(days: Int = 7): FeedLoadReport = withContext(Dispatchers.IO) { mutex.withLock {
-        buildReport(readUnsafe(), days, clock(), ZoneId.systemDefault())
-    } }
+    override suspend fun pendingUpload(limit: Int): List<FeedLoadRecord> = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val nowMs = clock().toEpochMilli()
+            readUnsafe().asSequence()
+                .filter { !it.uploaded }
+                .mapNotNull { settle(it, nowMs) }
+                .take(limit)
+                .toList()
+        }
+    }
+
+    override suspend fun markUploaded(records: List<FeedLoadRecord>) {
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val sent = records.associateBy { it.loadId }
+                val updated = readUnsafe().map { record ->
+                    val settled = sent[record.loadId] ?: return@map record
+                    // Keeps "abandoned" on disk: a render arriving later must not contradict the backend.
+                    record.copy(outcome = settled.outcome, errorCode = settled.errorCode, uploaded = true)
+                }
+                writeUnsafe(updated)
+            }
+        }
+    }
+
+    /** This phone's own answer: used in demo mode and when the backend summary is not reachable. */
+    suspend fun report(days: Int = 7): FeedLoadReport = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            buildReport(readUnsafe(), days, clock(), ZoneId.systemDefault()).copy(scope = SCOPE_THIS_DEVICE)
+        }
+    }
 
     private fun base(a: FeedLoadAttempt, outcome: String, requestCompleted: Long, errorCode: String? = null) = FeedLoadRecord(
         loadId = a.loadId, sessionId = sessionId, startedAtEpochMs = a.startedAtEpochMs,
@@ -123,6 +185,17 @@ class FeedLoadTelemetry(
 
     companion object {
         internal const val ABANDONED_AFTER_MS = 60_000L
+
+        /**
+         * The outcome to report for [record] at [nowMs], or null while it can still change:
+         * a load waiting for its render less than [ABANDONED_AFTER_MS] is not settled yet.
+         */
+        internal fun settle(record: FeedLoadRecord, nowMs: Long): FeedLoadRecord? = when {
+            record.outcome != "render_pending" -> record
+            nowMs - record.startedAtEpochMs >= ABANDONED_AFTER_MS ->
+                record.copy(outcome = "abandoned", errorCode = "RENDER_ABANDONED")
+            else -> null
+        }
 
         /**
          * Builds BQ-01 locally. Abandoned renders are reported separately and excluded from

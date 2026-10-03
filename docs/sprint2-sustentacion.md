@@ -37,7 +37,7 @@ The Android client consumes the same Supabase API v1 as the iOS app. What is wor
 - **Tabs by role** (context-aware): "Publicar" only for restaurants, "Rendimiento" for restaurants and admins.
 - **Shake-to-refresh** with the accelerometer on the "Hoy" feed (sensor).
 - **"Menor fila"**, a third criterion in "Elige por mí" (smart feature).
-- **BQ-01** instrumentation: every feed load is recorded with its outcome, connection, device, OS and timing, and summarized in a card in "Rendimiento". Aggregation across devices still needs a backend endpoint (section 12).
+- **BQ-01** end to end: every feed load is recorded with its outcome, connection, device, OS and timing, uploaded to the backend (`POST /telemetry/feed-loads`), aggregated across all devices in Postgres and shown in a card in "Rendimiento" (section 12).
 
 ---
 
@@ -80,6 +80,7 @@ flowchart TB
     AC --> SB[("Supabase API v1<br/>shared with iOS")]
     LR --> GPS[("Fused location<br/>Google Play services")]
     FLT --> FILE[("Local JSON file<br/>BQ-01 records")]
+    FILE -- WorkManager --> AC
 ```
 
 One sentence per block. The UI only draws what the state says and never touches the network. The ViewModel is each screen's brain: it fetches, decides the state, and publishes it. A Repository is a contract: in debug without a backend it answers with a copy of the seed data, with a backend it calls the real API, and screens cannot tell the difference. `ApiClient` is the only piece that knows the UniEat API, and it gets its token from `SessionManager`, the only piece that knows Supabase Auth.
@@ -337,16 +338,26 @@ flowchart LR
     B -- ApiException --> D[failure + error code]
     C --> E[FeedScreen draws the list<br/>render time]
     C -- no render after 60 s --> AB[abandoned]
-    D & E & AB --> F[("feed-load-telemetry.json<br/>connection, device, OS, hour")]
-    F --> G[Last 7 days, grouped<br/>failure rate and p95]
+    D & E & AB --> F[("feed-load-telemetry.json<br/>on the phone")]
+    F --> W[WorkManager<br/>runs when online]
+    W --> U[FeedLoadUploader<br/>batches of 100]
+    U --> P[POST /telemetry/feed-loads]
+    P --> T[("feed_load_telemetry<br/>Postgres")]
+    T --> S[feed_load_summary<br/>7 days, grouped,<br/>failure rate and p95]
+    S --> G[GET /telemetry/feed-loads/summary]
     G --> H[BQ-01 card in Rendimiento]
+    F -. server unreachable .-> L[Local report<br/>this device only] -.-> H
 ```
 
 **How it is computed**: failure rate = failures ÷ (rendered + failures) per group. The p95 is the nearest-rank percentile of the time from the start of the request to the moment the list is drawn. A load the user abandons (left the screen before the feed was drawn) is counted apart, because leaving the screen is not a technical failure. An empty feed that loads fine counts as a success, not a failure.
 
-**Status**: the data is recorded and summarized on each phone. Answering across all devices requires the backend to receive these records (a `POST /telemetry/feed-loads` endpoint and the aggregation with `percentile_cont(0.95)`); `POST /events/batch` only accepts publication events, so they cannot be sent there. That part is pending with the backend owners.
+**The pipeline**: each settled record (rendered, failure, or abandoned after 60 s) waits on disk until WorkManager finds network, then `FeedLoadUploader` sends it in batches of up to 100 to `POST /telemetry/feed-loads`. The server ignores a repeated `loadId`, so a batch resent after a timeout is never counted twice. Postgres groups the last seven days by connection, device, OS version and hour (Bogotá time) in `feed_load_summary`, with `percentile_disc(0.95)`: the same nearest-rank definition the phone uses. The card reads `GET /telemetry/feed-loads/summary` and says "Todos los dispositivos"; if the server cannot answer, it shows this phone's own records and says so.
 
-**Files**: `data/telemetry/FeedLoadTelemetry.kt`, the load and render hooks in `FeedViewModel` and `FeedScreen`, and `FeedLoadingBqCard` in `PerformanceScreen.kt`.
+**Why a separate endpoint**: `POST /events/batch` only accepts events tied to a menu publication, and a feed load is not about one menu. Mixing them would have meant loosening a contract iOS also depends on.
+
+**Privacy**: only technical data travels: no location, no menu, no text typed by the user. The summary is admin-only, like the other team dashboards.
+
+**Files**: Android: `data/telemetry/FeedLoadTelemetry.kt`, `data/telemetry/FeedLoadUpload.kt` (repository, uploader, worker), the load and render hooks in `FeedViewModel` and `FeedScreen`, and `FeedLoadingBqCard` in `PerformanceScreen.kt`. Backend: migration `20261003000000_bq01_feed_load_telemetry.sql`, `handlers/telemetry.ts`, `parseFeedLoadBatch` in `domain/validation.ts`.
 
 ---
 
@@ -462,10 +473,10 @@ Known limitation: DataStore preferences persist the refresh token but do not enc
 
 ## 15. Tests and validation
 
-Run with `./gradlew :app:testDebugUnitTest` on October 2, 2026. Real result: **112 tests, 0 failures, 0 skipped**, on the JVM without an emulator: the 88 from the feed and detail slices plus 24 from Samuel's slice.
+Run with `./gradlew :app:testDebugUnitTest` on October 2, 2026. Real result: **112 tests, 0 failures, 0 skipped**, on the JVM without an emulator: the 88 from the feed and detail slices plus 24 from Samuel's slice. The BQ-01 upload added 7 more (`FeedLoadSyncTest`), for **119**.
 
 ```mermaid
-pie title 112 unit tests by area, all passing
+pie title 119 unit tests by area
     "Feed (ViewModel)" : 14
     "Dashboard" : 6
     "BQ-06 wait rule" : 5
@@ -475,7 +486,7 @@ pie title 112 unit tests by area, all passing
     "Analytics pipeline" : 9
     "Proximity / GPS math" : 4
     "Auth, session and profile" : 16
-    "BQ-01 telemetry" : 3
+    "BQ-01 telemetry and upload" : 10
     "Shake and Menor fila" : 5
     "Formatting and fakes" : 3
 ```
@@ -501,6 +512,7 @@ pie title 112 unit tests by area, all passing
 | ShakeRefreshControllerTest | Shake threshold and throttle | 3 | PASS |
 | RecommendationStrategySamuelTest | "Menor fila" order and BQ-06 evidence rule | 2 | PASS |
 | FeedLoadTelemetryTest | p95, grouping, failure rate with abandoned loads apart | 3 | PASS |
+| FeedLoadSyncTest | When a load is ready to send, batches, offline retry, invalid batch dropped, backend summary decoding and fallback | 7 | |
 
 There are no instrumented UI tests (Compose/emulator); visual validation is done by hand on the emulator with the demo data.
 
@@ -527,4 +539,5 @@ There are no instrumented UI tests (Compose/emulator); visual validation is done
 - **DataStore without encryption** (Samuel): enough for the course, documented as a known limitation for production.
 - **Tabs by role as UX, the backend as the security boundary** (Samuel): the 403 still protects the data.
 - **Abandoned loads apart from failures in BQ-01** (Samuel): a user leaving the screen says nothing about the network or the app.
-- **BQ-01 records on the phone until the backend has an endpoint** (Samuel): `POST /events/batch` only accepts publication events, and sending unknown kinds would just be rejected.
+- **BQ-01 with its own endpoint** (Samuel): `POST /events/batch` only accepts events tied to a menu publication; a separate `POST /telemetry/feed-loads` keeps that contract intact for iOS.
+- **Same p95 on the phone and in Postgres** (Samuel): nearest rank in Kotlin and `percentile_disc` in SQL, so the local fallback and the server answer mean the same thing.
