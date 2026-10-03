@@ -41,7 +41,7 @@ Login uses Supabase email/password authentication. `SessionManager` restores the
 
 | Team member | Business question | Type | Rationale |
 | --- | --- | --- | --- |
-| Camilo Molina | BQ-05 | | Space reserved for Camilo Molina |
+| Camilo Molina | BQ-05. For the establishment a student has selected, which entrance and location references are currently available, and which need an uncertainty warning because details are missing or location discrepancies remain unresolved? | Type 2 | The answer is shown in the menu detail before the student walks to the place. A pure function, `LocationGuidance`, turns the menu into the references that exist (map pin, photo, address, entrance description), an explicit label for each one that is missing, and a warning while `location` reports are still pending. Usage is measured with `detail_open`, `location_open` and `arrival` events, and the BQ-05 dashboard section splits them by platform. |
 | Juan José Murillo | BQ-06. How long would a student wait in line, and how reliable is that estimate? | Type 2 | Lunch decisions happen inside a fixed break, so the wait matters as much as the price. The estimate aggregates community wait reports on the backend, and the app must be explicit about how much evidence backs it instead of showing a number that looks exact. |
 | Samuel David Rozen Mogollon | BQ-01. Over the last seven days, which combinations of connection type, device model, and OS version had the highest feed-loading failure rates and 95th-percentile request-to-render times, broken down by hour? | Type 1 | Android now captures the required load identifiers, timestamps, outcome, connection type, device model and OS version. The records are buffered locally. A load left pending for more than 60 seconds is reported as `abandoned` and excluded from the technical-failure denominator, because leaving the screen is not evidence of a network/render failure. The cross-device BQ still requires the shared backend ingestion/aggregation endpoint before it can be considered implemented in the analytics system. |
 
@@ -53,9 +53,9 @@ How BQ-06 looks in the app. The backend sends `waitMinutes`, `waitSampleCount` a
 
 | Rubric item | Functionality | Owner |
 | --- | --- | --- |
-| a. Sensor | Space reserved for Camilo Molina | Camilo Molina |
+| a. Sensor | GPS in the menu detail through `FusedLocationProviderClient`: walking distance to the establishment and a "Tú" marker next to its pin on the map. The permission is explained before it is requested, and approximate location is supported with a warning that the distance may vary. | Camilo Molina |
 | b. Type 2 BQ | BQ-06 wait estimate with its evidence level in the feed and the detail. Each member also documents their own question here. | Juan José Murillo |
-| c. Context aware | Space reserved for Camilo Molina | Camilo Molina |
+| c. Context aware | The location card adapts to the device: without permission or with location turned off it explains why there is no distance and stays usable, and with a precise fix within about 50 m it asks "¿Ya llegaste?" to record a self-reported arrival. | Camilo Molina |
 | d. Smart feature | The recommendation tab. One menu taken from the backend rank-v1 options, with the backend explanation of why, interchangeable selection criteria and a button to ask for another option. | Juan José Murillo |
 | e. Authentication | Supabase email/password login, persisted session, transparent access-token refresh and best-effort remote sign-out through `SessionManager`. | Samuel David Rozen Mogollon |
 | f. External services | Supabase Auth (`/auth/v1/token`, `/logout`) plus the authenticated `GET /me` profile endpoint. | Samuel David Rozen Mogollon |
@@ -65,6 +65,12 @@ Samuel’s additional contributions to the functionality rubric:
 - **a. Sensor:** shake-to-refresh on the feed uses the accelerometer while the screen is resumed; shakes are ignored while a load is already running.
 - **c. Context aware:** the navigation shell adapts the available tabs to the authenticated user role returned by `GET /me`; a profile-load failure is visible and retryable instead of silently assuming a role.
 - **d. Smart feature:** “Menor fila” is an additional `RecommendationStrategy` that selects the shortest supported wait estimate while preserving backend order as the tie-breaker.
+
+Camilo’s additional contributions to the functionality rubric:
+
+- **d. Smart feature:** when "Elige por mí" opens a menu, the detail shows the chosen criterion and the backend explanation of why it was recommended.
+- **e. Authentication:** the menu detail sends the user back to the login when the session expires, and an expired or revoked session clears the local credentials first, so the app cannot loop between the login and the feed.
+- **f. External services:** `GET /menus/:id`, `POST /reports`, `POST /events/batch`, the BQ-05 data from `GET /admin/dashboard` and `GET /restaurant/location-guidance`, OpenStreetMap tiles for the map and Google Maps for directions. Every request carries `X-UniEat-Platform: android`.
 
 Other functionality shipped this sprint on the feed slice. The filter sheet with the five parameters `GET /feed` accepts, shared between tabs. Live expiry, where menus disappear when their valid-until time passes, judged with the server clock. Per-state screens for loading, empty, offline, server error and expired session. Samuel’s authentication/profile slice is implemented. BQ-01 client instrumentation is implemented; shared ingestion and aggregation remain a backend dependency.
 
@@ -76,8 +82,8 @@ Other functionality shipped this sprint on the feed slice. The filter sheet with
 | Filters sheet | Budget slider plus time, diet, area and payment chips. A local draft applied only when the user confirms. | Juan José Murillo |
 | Recommendation tab | Active filters summary, criterion chips, the recommended menu with its explanation and a button to ask for another option. | Juan José Murillo |
 | Performance tab | The BQ dashboard. The metrics from `GET /performance` (admins) or `GET /restaurant/performance` (restaurants, limited to their establishments) on one screen, with a period selector of 7 or 28 days, a notice when the backend marks the data as insufficient, and a restricted state for accounts without access. The app asks for `platform=all`, so the counts include iOS and Android events; the screen shows which clients the backend counted (an older backend answers iOS only, and the label says so). Each member adds the card of their own question here: BQ-01 (all devices) and BQ-05 split by iOS / Android / no platform, from `GET /admin/dashboard` for admins and `GET /restaurant/location-guidance` for restaurants. | Juan José Murillo |
-| Menu detail | Space reserved for Camilo Molina | Camilo Molina |
-| Navigation shell and theme | Space reserved for Camilo Molina | Camilo Molina |
+| Menu detail | Dishes, price, validity ("Vigente", "Por vencer · N min" or "Vencido", judged with the server clock), wait evidence and the BQ-05 location card: OpenStreetMap pin, GPS distance, address, entrance, labels for missing references and a warning for pending location reports. Includes the report sheet, the arrival prompt, the recommendation reason when opened from "Elige por mí", and separate states for gone, expired session and offline. | Camilo Molina |
+| Navigation shell and theme | Bottom tabs, type-safe routes and the theme ported from the iOS app (palette, stickers and cards). The tabs shown depend on the role (Samuel). | Camilo Molina |
 | Login | Email/password form with client validation and idle/loading/error/success states; demo entry remains available when no backend is configured. | Samuel David Rozen Mogollon |
 | Profile | Authenticated data from `GET /me`, including display name, role and establishment memberships, plus retry and sign-out actions. | Samuel David Rozen Mogollon |
 
@@ -95,7 +101,7 @@ flowchart LR
     PERF --> DASH[Performance tab<br/>BQ dashboard in the app]
 ```
 
-The queue, the scheduler and the uploader are owned by Camilo Molina, and their rationale is reserved for him. The feed events on top of the pipeline are owned by Juan José Murillo. The feed records `feed_impression` the first time a card actually becomes visible, once per menu per session, and the detail records `detail_open`, `selection` and `arrival`. Each event gets its id when it is created, so a retried batch can never count twice. In demo mode the same queue and scheduler run against a logging stand-in. Filter Logcat by `UniEatEvents` to watch the events flow.
+The queue, the scheduler and the uploader are owned by Camilo Molina. `EventQueue` keeps events in a JSON file on disk behind a `Mutex`, so they survive the app being closed. It holds at most 1,000 events and drops anything older than the server's 7-day window, and it writes through a temporary file so a crash cannot leave it half written. `WorkManager` runs a single unique upload job only when there is a network, with exponential backoff from 30 seconds. `EventUploader` sends batches of 100 and removes them only after the server accepts them. A `VALIDATION_ERROR` batch is dropped because it would fail forever, and any other error keeps the events for the next attempt. The detail adds `location_open` when Google Maps is opened from the location card. The feed events on top of the pipeline are owned by Juan José Murillo. The feed records `feed_impression` the first time a card actually becomes visible, once per menu per session, and the detail records `detail_open`, `selection` and `arrival`. Each event gets its id when it is created, so a retried batch can never count twice. In demo mode the same queue and scheduler run against a logging stand-in. Filter Logcat by `UniEatEvents` to watch the events flow.
 
 The other end of the pipeline is visible in the app. The Performance tab is the BQ dashboard, owned by Juan José Murillo. It shows the metrics the backend computes from these events, all on one screen, and the client computes nothing. Role visibility is driven by the authenticated profile. Accounts without access see the restricted state instead of the numbers, and a profile-load failure can be retried from the navigation shell.
 
@@ -181,9 +187,33 @@ classDiagram
 
 The recommendation tab delegates the choice to an interchangeable criterion the user switches at runtime. One criterion keeps the backend rank-v1 order and the other picks by the lowest price the backend already sends. The reason for the pattern is that the selection criterion is the one axis of this feature that genuinely varies, and the pattern keeps each criterion a few lines long and independently tested. Neither strategy invents a ranking. The backend still filters, orders and explains, and a strategy only chooses among its results.
 
-### Pattern by Camilo Molina
+### Repository, by Camilo Molina
 
-Space reserved for Camilo Molina.
+```mermaid
+classDiagram
+    class MenuRepository {
+        <<interface>>
+        +feed(filters) FeedResponse
+        +menu(id) MenuDetailResponse
+        +myMenus() List~DailyMenu~
+        +publish(body) DailyMenu
+        +revise(id, body) DailyMenu
+        +close(id, expectedVersion) CloseResponse
+    }
+    class RemoteMenuRepository {
+        calls api-v1 through ApiClient
+    }
+    class FakeMenuRepository {
+        debug only, seed data
+    }
+    MenuRepository <|.. RemoteMenuRepository
+    MenuRepository <|.. FakeMenuRepository
+    AppContainer --> MenuRepository : chooses the implementation
+    MenuDetailViewModel --> MenuRepository
+    FeedViewModel --> MenuRepository
+```
+
+ViewModels ask `MenuRepository` for menus and never touch the network client. `AppContainer` gives them `RemoteMenuRepository` when a backend is configured and `FakeMenuRepository` in debug builds without one. That is what made it possible to build and test the detail and the BQ-05 card with seed data before the login existed, and it keeps the unit tests free of HTTP. The same split is used for reports and analytics.
 
 ### Proxy, by Samuel David Rozen Mogollon
 
