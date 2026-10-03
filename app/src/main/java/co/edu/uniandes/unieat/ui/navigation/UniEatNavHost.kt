@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -45,11 +46,23 @@ import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
 import co.edu.uniandes.unieat.ui.screens.PublishScreen
 import co.edu.uniandes.unieat.ui.theme.Palette
+import kotlinx.coroutines.launch
 
 /** App navigation graph: Login → tabs (Feed, Recommend, Publish, Performance, Profile) → Detail. */
 @Composable
 fun UniEatNavHost(container: AppContainer, navController: NavHostController = rememberNavController()) {
     val authState by container.sessionManager.state.collectAsStateWithLifecycle()
+    // AUTH_REQUIRED from any screen: clear the local session first, then go to the login.
+    // Navigating alone left the session "signed in" locally, so the login sent the user straight
+    // back to the feed, which got 401 again (an endless login ↔ feed loop when the server revokes
+    // a token the phone still considers valid).
+    val scope = rememberCoroutineScope()
+    val expireSession: () -> Unit = {
+        scope.launch {
+            container.sessionManager.signOut()
+            navController.navigate(Login) { popUpTo(0) { inclusive = true } }
+        }
+    }
     val shell: AppShellViewModel = viewModel(
         factory = simpleFactory {
             AppShellViewModel(container.sessionManager, container.profileRepository, container.usesFakeData)
@@ -102,7 +115,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 FeedScreen(
                     onOpenMenu = { navController.navigate(Detail(it)) },
                     // Expired session: back to the login, clearing the whole back stack.
-                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    onSessionExpired = expireSession,
                 )
             }
             composable<Detail> {
@@ -113,13 +126,13 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onBack = navController::popBackStack,
                     // Swaps the current detail for another one (debug fixture picker).
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
-                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    onSessionExpired = expireSession,
                 )
             }
             composable<Recommend> {
                 RecommendScreen(
                     onOpenMenu = { id, criterion, reason -> navController.navigate(Detail(id, criterion, reason)) },
-                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    onSessionExpired = expireSession,
                 )
             }
             composable<Publish> { PublishScreen() }
@@ -127,7 +140,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 PerformanceScreen(
                     role = role,
                     userId = (profileState as? AppProfileState.Content)?.profile?.id,
-                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    onSessionExpired = expireSession,
                 )
             }
             composable<Profile> {
