@@ -178,9 +178,9 @@ The recommendation tab delegates the choice to an interchangeable criterion the 
 
 Space reserved for Camilo Molina.
 
-### Pattern by Samuel David Rozo
+### Pattern by Samuel David Rozen
 
-Space reserved for Samuel David Rozo.
+Space reserved for Samuel David Rozen.
 
 ## Verification status
 
