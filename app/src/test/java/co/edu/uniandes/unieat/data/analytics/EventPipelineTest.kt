@@ -43,6 +43,8 @@ class EventPipelineTest {
             batches += events
             return BatchResponse(accepted = events.size)
         }
+
+        override suspend fun performance(days: Int) = error("unused in these tests")
     }
 
     // --- EventQueue ---------------------------------------------------------------------------

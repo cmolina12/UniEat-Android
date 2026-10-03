@@ -59,7 +59,7 @@ class AppContainer(
     // Analytics pipeline: EventTracker → EventQueue (disk) → WorkManager → EventUploader → POST /events/batch.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val analyticsRepository: AnalyticsRepository by lazy {
+    val analyticsRepository: AnalyticsRepository by lazy {
         (if (usesFakeData) DevDataSource.analyticsRepository() else null) ?: RemoteAnalyticsRepository(apiClient)
     }
 

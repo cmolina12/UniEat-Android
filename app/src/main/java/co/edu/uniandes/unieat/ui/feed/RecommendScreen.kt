@@ -29,6 +29,7 @@ import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
+import co.edu.uniandes.unieat.ui.theme.ChipRow
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton

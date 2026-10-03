@@ -2,19 +2,26 @@ package co.edu.uniandes.unieat.data.analytics
 
 import co.edu.uniandes.unieat.core.model.BatchResponse
 import co.edu.uniandes.unieat.core.model.EventBatch
+import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.remote.ApiException
 import io.ktor.http.HttpMethod
 
-/** POST /events/batch behind the Repository pattern (the uploader never sees ApiClient). */
+/** Analytics endpoints behind the Repository pattern (callers never see ApiClient). */
 interface AnalyticsRepository {
     suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse
+
+    /** GET /performance — metrics the backend computes from the event pipeline (BQ dashboard). */
+    suspend fun performance(days: Int): PerformanceSummary
 }
 
 class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepository {
     override suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse =
         api.send(HttpMethod.Post, "events/batch", EventBatch(events)) // platform = "android" by default
+
+    override suspend fun performance(days: Int): PerformanceSummary =
+        api.get("performance", mapOf("days" to days))
 }
 
 enum class FlushResult { DONE, RETRY_LATER }

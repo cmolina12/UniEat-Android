@@ -99,6 +99,24 @@ class ApiContractTest {
     }
 
     @Test
+    fun performanceDecodesAndSendsTheDays() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val body = """{"periodDays":7,"impressions":120,"detailOpens":45,"selections":18,
+            "reportedArrivals":9,"sampleSize":120,"insufficientData":false,
+            "rates":{"detailOpenRate":0.37}}"""
+        val repo = co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository(client(HttpStatusCode.OK, body, seen))
+
+        val summary = repo.performance(days = 7)
+
+        val request = seen.single()
+        assertEquals("/functions/v1/api-v1/performance", request.url.encodedPath)
+        assertEquals("7", request.url.parameters["days"])
+        assertEquals(120, summary.impressions)
+        assertEquals(18, summary.selections)
+        assertFalse(summary.insufficientData) // unknown fields like "rates" are ignored
+    }
+
+    @Test
     fun errorEnvelopeBecomesApiException() = runTest {
         val body = """{"error":{"code":"GONE","message":"Este menú ya venció","traceId":"t-1",
             "details":{"status":"expired","version":1,"validUntil":"2026-09-30T05:19:11.216Z","closedAt":null}}}"""

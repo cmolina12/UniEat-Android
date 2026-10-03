@@ -22,8 +22,8 @@ import androidx.navigation.toRoute
 import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
+import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
 import co.edu.uniandes.unieat.ui.screens.LoginScreen
-import co.edu.uniandes.unieat.ui.screens.PerformanceScreen
 import co.edu.uniandes.unieat.ui.screens.ProfileScreen
 import co.edu.uniandes.unieat.ui.screens.PublishScreen
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -67,7 +67,11 @@ fun UniEatNavHost(navController: NavHostController = rememberNavController()) {
                 )
             }
             composable<Publish> { PublishScreen() }
-            composable<Performance> { PerformanceScreen() }
+            composable<Performance> {
+                PerformanceScreen(
+                    onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                )
+            }
             composable<Profile> {
                 ProfileScreen(onSignOut = {
                     navController.navigate(Login) { popUpTo(0) { inclusive = true } }
