@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
@@ -21,8 +22,16 @@ import kotlinx.coroutines.launch
 sealed interface PerformanceUiState {
     data object Loading : PerformanceUiState
 
-    /** Metrics computed by the backend for the selected period. */
-    data class Content(val summary: PerformanceSummary, val feedLoadReport: FeedLoadReport? = null) : PerformanceUiState
+    /**
+     * Metrics computed by the backend for the selected period. [ownEstablishmentsOnly] is true when
+     * [summary] comes from GET /restaurant/performance; [locationGuidance] is the BQ-05 card.
+     */
+    data class Content(
+        val summary: PerformanceSummary,
+        val feedLoadReport: FeedLoadReport? = null,
+        val ownEstablishmentsOnly: Boolean = false,
+        val locationGuidance: LocationGuidanceSnapshot? = null,
+    ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
     data class Restricted(val message: String) : PerformanceUiState
@@ -34,13 +43,19 @@ sealed interface PerformanceUiState {
 }
 
 /**
- * Loads GET /performance through [AnalyticsRepository] and maps the outcome to [PerformanceUiState].
+ * Loads the metrics through [AnalyticsRepository] and maps the outcome to [PerformanceUiState].
+ * Restaurants read their own establishments (GET /restaurant/performance and /restaurant/location-guidance);
+ * admins read every establishment (GET /performance and `bq05` of GET /admin/dashboard).
  * The numbers come from the backend's event pipeline; nothing is computed on the client.
  */
 class PerformanceViewModel(
     private val repository: AnalyticsRepository,
     /** BQ-01 (Samuel): its card is extra; if it fails, the rest of the dashboard still loads. */
     private val feedLoads: FeedLoadRepository? = null,
+    /** Effective role from GET /me; it only picks the endpoint, the backend still authorizes. */
+    private val role: String? = null,
+    /** BQ-05 (Camilo): admins, restaurants and demo mode load it; students never reach this tab. */
+    private val showLocationGuidance: Boolean = false,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
@@ -59,7 +74,10 @@ class PerformanceViewModel(
         _state.value = PerformanceUiState.Loading
         viewModelScope.launch {
             _state.value = try {
-                PerformanceUiState.Content(repository.performance(_days.value), feedLoadReport())
+                val restaurant = role == ROLE_RESTAURANT
+                val days = _days.value
+                val summary = if (restaurant) repository.restaurantPerformance(days) else repository.performance(days)
+                PerformanceUiState.Content(summary, feedLoadReport(), restaurant, locationGuidance(days, restaurant))
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
@@ -74,6 +92,14 @@ class PerformanceViewModel(
     private suspend fun feedLoadReport(): FeedLoadReport? =
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
+    /** BQ-05 card: optional like BQ-01, so a failure here never hides the other metrics. */
+    private suspend fun locationGuidance(days: Int, restaurant: Boolean): LocationGuidanceSnapshot? {
+        if (!showLocationGuidance) return null
+        return runCatching {
+            if (restaurant) repository.restaurantLocationGuidance(days) else repository.locationGuidance(days)
+        }.getOrNull()
+    }
+
     /** Switch between 7 and 28 days; picking the same period again does nothing. */
     fun selectDays(days: Int) {
         if (_days.value == days) return
@@ -83,11 +109,18 @@ class PerformanceViewModel(
 
     companion object {
         private const val BQ01_DAYS = 7
+        private const val ROLE_RESTAURANT = "restaurant"
+        private const val ROLE_ADMIN = "admin"
 
-        fun factory(): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(role: String?): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                PerformanceViewModel(app.container.analyticsRepository, app.container.feedLoadRepository)
+                PerformanceViewModel(
+                    app.container.analyticsRepository,
+                    app.container.feedLoadRepository,
+                    role = role,
+                    showLocationGuidance = role == ROLE_ADMIN || role == ROLE_RESTAURANT || app.container.usesFakeData,
+                )
             }
         }
     }

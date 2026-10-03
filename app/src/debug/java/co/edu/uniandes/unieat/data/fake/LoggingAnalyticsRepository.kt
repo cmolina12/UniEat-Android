@@ -2,6 +2,10 @@ package co.edu.uniandes.unieat.data.fake
 
 import android.util.Log
 import co.edu.uniandes.unieat.core.model.BatchResponse
+import co.edu.uniandes.unieat.core.model.LocationCoverage
+import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
+import co.edu.uniandes.unieat.core.model.LocationReportCounts
+import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
@@ -28,6 +32,21 @@ class LoggingAnalyticsRepository : AnalyticsRepository {
             reportedArrivals = 5 * scale,
             sampleSize = 48 * scale,
             insufficientData = false,
+            platform = "all",
+        )
+    }
+
+    /** Demo BQ-05 numbers; real ones come from `bq05` of GET /admin/dashboard. */
+    override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot {
+        val scale = if (days >= 28) 4 else 1
+        return LocationGuidanceSnapshot(
+            periodDays = days,
+            ios = LocationSignals(6 * scale, 3 * scale, LocationReportCounts(pending = 1, confirmed = scale)),
+            android = LocationSignals(4 * scale, 2 * scale, LocationReportCounts(pending = 2, dismissed = scale)),
+            coverage = LocationCoverage(
+                establishments = 4, withCoordinates = 3, withoutCoordinates = 1,
+                withEntranceDescription = 2, withoutEntranceDescription = 2, withPhoto = 1, withoutPhoto = 3,
+            ),
         )
     }
 

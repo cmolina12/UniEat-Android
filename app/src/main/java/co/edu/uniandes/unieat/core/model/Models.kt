@@ -113,7 +113,54 @@ data class PerformanceSummary(
     val reportedArrivals: Int,
     val sampleSize: Int = 0,
     val insufficientData: Boolean = true,
+    /** Clients counted: "ios", "android" or "all". Null means a backend without `?platform=` (iOS only). */
+    val platform: String? = null,
 )
+
+/** BQ-05 location reports of one platform, by their current moderation status. */
+@Serializable
+data class LocationReportCounts(
+    val pending: Int = 0,
+    val confirmed: Int = 0,
+    val dismissed: Int = 0,
+)
+
+/** BQ-05 signals of one platform: Maps opens, self-reported arrivals and location reports. */
+@Serializable
+data class LocationSignals(
+    val locationOpens: Int = 0,
+    val reportedArrivals: Int = 0,
+    val locationReports: LocationReportCounts = LocationReportCounts(),
+)
+
+/** Location references every establishment has (or lacks) right now, independent of the period. */
+@Serializable
+data class LocationCoverage(
+    val establishments: Int = 0,
+    val withCoordinates: Int = 0,
+    val withoutCoordinates: Int = 0,
+    val withEntranceDescription: Int = 0,
+    val withoutEntranceDescription: Int = 0,
+    val withPhoto: Int = 0,
+    val withoutPhoto: Int = 0,
+)
+
+/**
+ * `bq05` of GET /admin/dashboard. Unlike [PerformanceSummary] it is split by platform;
+ * [unknown] holds records sent without the X-UniEat-Platform header.
+ */
+@Serializable
+data class LocationGuidanceSnapshot(
+    val periodDays: Int,
+    val ios: LocationSignals = LocationSignals(),
+    val android: LocationSignals = LocationSignals(),
+    val unknown: LocationSignals = LocationSignals(),
+    val coverage: LocationCoverage = LocationCoverage(),
+)
+
+/** GET /admin/dashboard: only `bq05` is read; BQ-03, BQ-04 and engagement are ignored here. */
+@Serializable
+data class AdminDashboardResponse(val bq05: LocationGuidanceSnapshot? = null)
 
 @Serializable
 data class Profile(
