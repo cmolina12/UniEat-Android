@@ -183,6 +183,9 @@ class MenuDetailViewModel(
                 when (e.code) {
                     ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
+                    // The shared offline text promises "la última copia guardada", which only the
+                    // feed has; the detail keeps no copy, so it says what actually happens.
+                    ApiException.OFFLINE -> MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
                     else -> MenuDetailUiState.Error(e.error.message, e.code)
                 }
             }
@@ -313,6 +316,7 @@ class MenuDetailViewModel(
 
     companion object {
         private const val SCREEN = "detail"
+        internal const val OFFLINE_MESSAGE = "Sin conexión con el servidor. Revisa tu señal e inténtalo de nuevo."
 
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {

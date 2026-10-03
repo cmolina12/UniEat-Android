@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import java.time.Duration
@@ -62,7 +63,11 @@ class MenuDetailViewModelTest {
             if (calls == 1) throw ApiException.offline() else MenuDetailResponse(serverNow, serverNow, menu())
         }, StubLocation(), RecordingTracker(), StubReports()) { serverNow }
         advanceUntilIdle()
-        assertEquals(ApiException.OFFLINE, (vm.state.value as MenuDetailUiState.Error).code)
+        val offline = vm.state.value as MenuDetailUiState.Error
+        assertEquals(ApiException.OFFLINE, offline.code)
+        // The detail keeps no cached copy, so it must not promise one (the feed's shared text does).
+        assertEquals(MenuDetailViewModel.OFFLINE_MESSAGE, offline.message)
+        assertFalse(offline.message.contains("copia"))
 
         vm.load()
         advanceUntilIdle()
