@@ -24,7 +24,7 @@ sealed interface PerformanceUiState {
 
     /**
      * Metrics computed by the backend for the selected period. [ownEstablishmentsOnly] is true when
-     * [summary] comes from GET /restaurant/performance; [locationGuidance] is the admin-only BQ-05 card.
+     * [summary] comes from GET /restaurant/performance; [locationGuidance] is the BQ-05 card.
      */
     data class Content(
         val summary: PerformanceSummary,
@@ -44,7 +44,8 @@ sealed interface PerformanceUiState {
 
 /**
  * Loads the metrics through [AnalyticsRepository] and maps the outcome to [PerformanceUiState].
- * Restaurants read GET /restaurant/performance (GET /performance is admin-only); admins also get BQ-05.
+ * Restaurants read their own establishments (GET /restaurant/performance and /restaurant/location-guidance);
+ * admins read every establishment (GET /performance and `bq05` of GET /admin/dashboard).
  * The numbers come from the backend's event pipeline; nothing is computed on the client.
  */
 class PerformanceViewModel(
@@ -53,7 +54,7 @@ class PerformanceViewModel(
     private val feedLoads: FeedLoadRepository? = null,
     /** Effective role from GET /me; it only picks the endpoint, the backend still authorizes. */
     private val role: String? = null,
-    /** BQ-05 (Camilo) lives in GET /admin/dashboard, so only admins (and demo mode) load it. */
+    /** BQ-05 (Camilo): admins, restaurants and demo mode load it; students never reach this tab. */
     private val showLocationGuidance: Boolean = false,
 ) : ViewModel() {
 
@@ -76,7 +77,7 @@ class PerformanceViewModel(
                 val restaurant = role == ROLE_RESTAURANT
                 val days = _days.value
                 val summary = if (restaurant) repository.restaurantPerformance(days) else repository.performance(days)
-                PerformanceUiState.Content(summary, feedLoadReport(), restaurant, locationGuidance(days))
+                PerformanceUiState.Content(summary, feedLoadReport(), restaurant, locationGuidance(days, restaurant))
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
@@ -92,8 +93,12 @@ class PerformanceViewModel(
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
     /** BQ-05 card: optional like BQ-01, so a failure here never hides the other metrics. */
-    private suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? =
-        if (showLocationGuidance) runCatching { repository.locationGuidance(days) }.getOrNull() else null
+    private suspend fun locationGuidance(days: Int, restaurant: Boolean): LocationGuidanceSnapshot? {
+        if (!showLocationGuidance) return null
+        return runCatching {
+            if (restaurant) repository.restaurantLocationGuidance(days) else repository.locationGuidance(days)
+        }.getOrNull()
+    }
 
     /** Switch between 7 and 28 days; picking the same period again does nothing. */
     fun selectDays(days: Int) {
@@ -114,7 +119,7 @@ class PerformanceViewModel(
                     app.container.analyticsRepository,
                     app.container.feedLoadRepository,
                     role = role,
-                    showLocationGuidance = role == ROLE_ADMIN || app.container.usesFakeData,
+                    showLocationGuidance = role == ROLE_ADMIN || role == ROLE_RESTAURANT || app.container.usesFakeData,
                 )
             }
         }

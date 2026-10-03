@@ -32,6 +32,7 @@ class LoggingAnalyticsRepository : AnalyticsRepository {
             reportedArrivals = 5 * scale,
             sampleSize = 48 * scale,
             insufficientData = false,
+            platform = "all",
         )
     }
 

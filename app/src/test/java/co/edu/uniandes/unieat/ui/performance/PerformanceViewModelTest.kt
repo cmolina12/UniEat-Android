@@ -138,6 +138,21 @@ class PerformanceViewModelTest {
     }
 
     @Test
+    fun restaurantGetsBq05ForItsOwnEstablishments() = runTest(dispatcher) {
+        val calls = mutableListOf<String>()
+        val analytics = StubAnalytics(
+            onRestaurant = { summary(it) },
+            onLocation = { calls += "admin"; guidance(it) },
+            onRestaurantLocation = { calls += "restaurant"; guidance(it).copy(android = LocationSignals(locationOpens = 1)) },
+        ) { summary(it) }
+        val vm = PerformanceViewModel(analytics, role = "restaurant", showLocationGuidance = true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("restaurant"), calls) // GET /admin/dashboard is admin-only: never called
+        assertEquals(1, (vm.state.value as PerformanceUiState.Content).locationGuidance?.android?.locationOpens)
+    }
+
+    @Test
     fun bq05IsNotRequestedWhenHidden() = runTest(dispatcher) {
         var requested = false
         val vm = PerformanceViewModel(StubAnalytics(onRestaurant = { summary(it) }, onLocation = { requested = true; guidance(it) }) { summary(it) }, role = "restaurant")
@@ -168,6 +183,7 @@ class PerformanceViewModelTest {
     private class StubAnalytics(
         private val onRestaurant: (suspend (Int) -> PerformanceSummary)? = null,
         private val onLocation: (suspend (Int) -> LocationGuidanceSnapshot?)? = null,
+        private val onRestaurantLocation: (suspend (Int) -> LocationGuidanceSnapshot?)? = null,
         // Last, so the existing tests can keep passing it as a trailing lambda.
         private val onPerformance: suspend (Int) -> PerformanceSummary,
     ) : AnalyticsRepository {
@@ -176,5 +192,6 @@ class PerformanceViewModelTest {
         override suspend fun restaurantPerformance(days: Int): PerformanceSummary =
             onRestaurant?.invoke(days) ?: error("restaurant endpoint not expected")
         override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = onLocation?.invoke(days)
+        override suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot? = onRestaurantLocation?.invoke(days)
     }
 }

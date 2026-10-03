@@ -113,6 +113,8 @@ data class PerformanceSummary(
     val reportedArrivals: Int,
     val sampleSize: Int = 0,
     val insufficientData: Boolean = true,
+    /** Clients counted: "ios", "android" or "all". Null means a backend without `?platform=` (iOS only). */
+    val platform: String? = null,
 )
 
 /** BQ-05 location reports of one platform, by their current moderation status. */

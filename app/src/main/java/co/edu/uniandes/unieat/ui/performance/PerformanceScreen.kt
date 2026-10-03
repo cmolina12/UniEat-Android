@@ -112,7 +112,7 @@ private fun PerformanceContent(
             is PerformanceUiState.Content -> {
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
                 FeedLoadingBqCard(state.feedLoadReport)
-                state.locationGuidance?.let { LocationGuidanceBqCard(it) }
+                state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
             }
         }
     }
@@ -121,9 +121,14 @@ private fun PerformanceContent(
 @Composable
 private fun SummaryCards(summary: PerformanceSummary, ownEstablishmentsOnly: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // The backend computes these from iOS events only; Android's own events are not in them yet.
+        // The backend says which clients it counted; an older backend omits it and counts iOS only.
+        val clients = when (summary.platform) {
+            "all" -> "iOS y Android"
+            "android" -> "solo Android"
+            else -> "solo eventos de la app iOS"
+        }
         Text(
-            if (ownEstablishmentsOnly) "Tus establecimientos · solo eventos de la app iOS" else "Todos los establecimientos · solo eventos de la app iOS",
+            (if (ownEstablishmentsOnly) "Tus establecimientos" else "Todos los establecimientos") + " · $clients",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -190,11 +195,12 @@ private fun FeedLoadingBqCard(report: FeedLoadReport?) {
 }
 
 /**
- * Camilo — BQ-05: location guidance from `bq05` of GET /admin/dashboard (admin only).
+ * Camilo — BQ-05: location guidance from `bq05` of GET /admin/dashboard (admins) or
+ * GET /restaurant/location-guidance (restaurants, only their establishments).
  * The only block split by platform; "Sin plataforma" holds records sent without the header.
  */
 @Composable
-private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot) {
+private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstablishmentsOnly: Boolean) {
     val columns = listOf(snapshot.ios, snapshot.android, snapshot.unknown)
     val rows: List<Pair<String, (LocationSignals) -> Int>> = listOf(
         "Aperturas de Maps" to { it.locationOpens },
@@ -205,7 +211,8 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot) {
     )
     SurfaceCard(Modifier.fillMaxWidth()) {
         Text("BQ-05 · Orientación de ubicación", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
-        Text("Todas las plataformas · últimos ${snapshot.periodDays} días", style = MaterialTheme.typography.bodySmall)
+        val scope = if (ownEstablishmentsOnly) "Tus establecimientos" else "Todos los establecimientos"
+        Text("$scope · todas las plataformas · últimos ${snapshot.periodDays} días", style = MaterialTheme.typography.bodySmall)
         TableRow(listOf("", "iOS", "Android", "Sin plataforma"), header = true)
         rows.forEach { (label, pick) -> TableRow(listOf(label) + columns.map { pick(it).toString() }) }
 
