@@ -29,16 +29,15 @@ The Android client consumes the same Supabase API v1 as the iOS app. What is wor
 - The **`feed_impression`** events (deduplicated per session) on top of the existing pipeline.
 - The **metrics dashboard** in the "Rendimiento" tab (`GET /performance`).
 
-**Samuel David Rozen Mogollon:**
+**By Samuel David Rozen Mogollon** (branch feat/samuel-auth-bq01):
 
-- Supabase email/password Login and sign-out.
-- Persisted session through `SessionStore` and transparent token refresh through `SessionManager`.
-- `GET /me` profile screen with loading, content, error and retry states.
-- **Proxy** pattern: `ApiClient` depends on `AccessTokenProvider`; `SessionManager` decides whether to return, restore or refresh a token.
-- BQ-01 client instrumentation records feed-loading outcomes, connection, device, OS and request-to-render timing. Cross-device aggregation still depends on a shared backend ingestion endpoint.
-- Sensor contribution: shake-to-refresh uses the accelerometer only while the feed is resumed and does not start a second request while loading.
-- Smart-feature contribution: “Menor fila” reuses BQ-06’s evidence rule and ranks only supported wait estimates using the server-aligned clock.
-- Context-aware contribution: tabs adapt to the authenticated role from `GET /me`; profile loading has an explicit retry state.
+- **Login** with Supabase Auth (email and password) and sign-out, replacing the debug test account (`DevTokenProvider` was removed).
+- **Persisted session**: it survives closing the app, and the access token is refreshed without the rest of the app noticing. This is the **Proxy** pattern (`SessionManager`).
+- **Profile** screen backed by `GET /me`: name, role and establishments, with loading, error and retry states.
+- **Tabs by role** (context-aware): "Publicar" only for restaurants, "Rendimiento" for restaurants and admins.
+- **Shake-to-refresh** with the accelerometer on the "Hoy" feed (sensor).
+- **"Menor fila"**, a third criterion in "Elige por mí" (smart feature).
+- **BQ-01** instrumentation: every feed load is recorded with its outcome, connection, device, OS and timing, and summarized in a card in "Rendimiento". Aggregation across devices still needs a backend endpoint (section 12).
 
 ---
 
@@ -48,30 +47,42 @@ The Android client consumes the same Supabase API v1 as the iOS app. What is wor
 flowchart TB
     U([User]) --> UI
     subgraph UI["Compose UI"]
-        FS[FeedScreen] 
+        FS[FeedScreen]
         RS[RecommendScreen]
         PS[PerformanceScreen]
         DS[MenuDetailScreen]
+        LS[LoginScreen]
+        PRS[ProfileScreen]
     end
     subgraph VMS["ViewModels · StateFlow"]
         FVM[FeedViewModel]
         PVM[PerformanceViewModel]
         DVM[MenuDetailViewModel]
+        LVM[LoginViewModel]
+        PRVM[ProfileViewModel]
+        SHVM[AppShellViewModel]
     end
     subgraph DATA["Data layer"]
         MR[MenuRepository]
         AR[AnalyticsRepository]
         RR[ReportRepository]
         LR[LocationRepository]
+        PR[ProfileRepository]
+        FLT[FeedLoadTelemetry]
         AC[ApiClient]
+        SM[SessionManager]
     end
     UI --> VMS --> DATA
-    MR & AR & RR --> AC
+    MR & AR & RR & PR --> AC
+    AC -- access token --> SM
+    SM --> AUTH[("Supabase Auth")]
+    SM --> DSTORE[("DataStore<br/>persisted session")]
     AC --> SB[("Supabase API v1<br/>shared with iOS")]
     LR --> GPS[("Fused location<br/>Google Play services")]
+    FLT --> FILE[("Local JSON file<br/>BQ-01 records")]
 ```
 
-One sentence per block. The UI only draws what the state says and never touches the network. The ViewModel is each screen's brain: it fetches, decides the state, and publishes it. A Repository is a contract: in debug without a backend it answers with a copy of the seed data, with a backend it calls the real API, and screens cannot tell the difference. `ApiClient` is the only piece that knows HTTP.
+One sentence per block. The UI only draws what the state says and never touches the network. The ViewModel is each screen's brain: it fetches, decides the state, and publishes it. A Repository is a contract: in debug without a backend it answers with a copy of the seed data, with a backend it calls the real API, and screens cannot tell the difference. `ApiClient` is the only piece that knows the UniEat API, and it gets its token from `SessionManager`, the only piece that knows Supabase Auth.
 
 Dependency injection is manual: `AppContainer` builds one instance of each piece and ViewModel factories read from it. No Hilt, because with this size a hand-made container is easier to explain and to test.
 
@@ -173,13 +184,15 @@ flowchart TD
     B["GET /feed<br/>filtered and ranked by the backend,<br/>each menu with its explanation"] --> S{Active strategy}
     S -- "Mejor puntuada" --> R1[Current position of the<br/>rank-v1 order, wrapping around]
     S -- "Más económica" --> R2[Lowest price among<br/>the same options]
+    S -- "Menor fila" --> R3[Shortest wait backed by<br/>BQ-06 evidence · Samuel]
     R1 --> UIcard[Card with the menu<br/>and the backend explanation]
     R2 --> UIcard
+    R3 --> UIcard
     UIcard --> N["Elegir otra opción → next one"]
     UIcard --> D["Ver publicación completa → detail"]
 ```
 
-**Where the "why" comes from**: the `explanation` field the backend sends per menu, shown as-is. **There is no local ranking**: the backend filters, orders, and explains; a strategy only chooses among results already delivered, using fields that already arrive (position and `lowestPriceCop`).
+**Where the "why" comes from**: the `explanation` field the backend sends per menu, shown as-is. **There is no local ranking**: the backend filters, orders, and explains; a strategy only chooses among results already delivered, using fields that already arrive (position, `lowestPriceCop`, and the BQ-06 wait fields).
 
 **Edge cases**: with no compatible menus, the empty state suggests changing filters; with no connection, the clear error with retry; with an expired session, the login. Switching criterion or reloading goes back to that criterion's best option.
 
@@ -240,11 +253,114 @@ Why a disk queue: a student without signal is the normal case on campus. Events 
 
 The "Rendimiento" tab is the other end of the pipeline: one screen with the metrics the backend computes via `GET /performance?days=7|28` — impressions, detail opens, selections, reported arrivals — and a period selector. The client computes no metric. If the backend flags `insufficientData`, the screen says so instead of presenting numbers as reliable; if the account has no role for the endpoint (it belongs to restaurants and admins), it shows "Acceso restringido" with the backend message instead of breaking.
 
-**Files**: `ui/performance/PerformanceViewModel.kt`, `ui/performance/PerformanceScreen.kt`, and the `performance(days)` method added to the existing `AnalyticsRepository` (no new repository). Each member will add their BQ's card here.
+**Files**: `ui/performance/PerformanceViewModel.kt`, `ui/performance/PerformanceScreen.kt`, and the `performance(days)` method added to the existing `AnalyticsRepository` (no new repository). Each member adds their BQ's card here; the BQ-01 card is already in place (section 12).
 
 ---
 
-## 10. Design patterns
+## 10. Login and session — Samuel
+
+**Problem it solves**: until this sprint every request used a debug test account. The app needed real users, and a session that survives closing the app without asking for the password again every hour.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant S as LoginScreen
+    participant VM as LoginViewModel
+    participant SM as SessionManager
+    participant A as Supabase Auth
+    participant D as DataStore
+
+    U->>S: types email and password, taps "Ingresar"
+    S->>VM: signIn(email, password)
+    VM->>VM: validates the email format and a non-empty password
+    VM-->>S: Loading (the button is disabled)
+    VM->>SM: signIn
+    SM->>A: POST /auth/v1/token?grant_type=password
+    A-->>SM: access_token, refresh_token, expires_in, user
+    SM->>D: saves the session
+    SM-->>VM: state SignedIn
+    VM-->>S: Success, navigates to "Hoy"
+```
+
+**How the token stays valid**: every API request asks `SessionManager` for a token. It answers from memory or from disk; if the token expires in less than a minute, it first refreshes it with `grant_type=refresh_token`. A `Mutex` makes concurrent requests wait for one single refresh.
+
+```mermaid
+flowchart TD
+    R[ApiClient needs a token] --> M{Session in memory or on disk?}
+    M -- no --> X[AUTH_REQUIRED → login]
+    M -- yes --> V{Expires in more than 1 minute?}
+    V -- yes --> T[Return the current token]
+    V -- no --> F[POST /token refresh_token]
+    F -- ok --> P[Save the new session, return the token]
+    F -- 400 / 401 --> C[Clear the session, SignedOut → login]
+    F -- 5xx / offline --> K[Keep the session, report the error]
+```
+
+**Error handling**: 400 and 401 mean wrong credentials or a dead session; 429 is "too many attempts"; 5xx and no connection keep the session, because a server hiccup is not a reason to log the user out. Sign-out is best-effort: the local session is always deleted, even offline or with an already expired token.
+
+**Start of the app**: while the stored session loads, the app shows a spinner, then starts in "Hoy" if there is a session and in the login if not. In demo mode (no backend configured) it always starts in "Hoy".
+
+**Files**: `data/auth/SessionManager.kt`, `data/auth/SupabaseAuthRepository.kt`, `data/auth/SessionStore.kt`, `ui/auth/LoginViewModel.kt`, `ui/auth/AuthScreens.kt`.
+
+---
+
+## 11. Profile and tabs by role — Samuel
+
+**Profile**: `ProfileScreen` calls `GET /me` and shows the name, the role and, for restaurant accounts, their establishments. It has loading, error with retry, and the "Cerrar sesión" button. In demo mode a fake repository answers with a demo admin profile.
+
+**Tabs by role (context-aware)**: the bottom bar adapts to who is using the app.
+
+| Role | Hoy | Elige por mí | Publicar | Rendimiento | Perfil |
+| --- | --- | --- | --- | --- | --- |
+| student | ✓ | ✓ | | | ✓ |
+| restaurant | ✓ | ✓ | ✓ | ✓ | ✓ |
+| admin | ✓ | ✓ | | ✓ | ✓ |
+
+The role comes from `GET /me` through `AppShellViewModel`, never from a composable. It is requested again only when the user changes, not on every token refresh, so the tabs do not flicker. If the request fails, a bar says "No se pudo cargar tu rol" with a retry button.
+
+Hiding a tab is **UX, not security**: the backend still answers 403 to an account without access, and "Rendimiento" already shows its restricted state for that case.
+
+**Files**: `ui/auth/ProfileViewModel.kt`, `data/repository/ProfileRepository.kt`, `ui/navigation/AppShellViewModel.kt`, `ui/navigation/UniEatNavHost.kt`.
+
+---
+
+## 12. BQ-01 — Feed loading performance — Samuel
+
+**The question** (Type 1, from Sprint 1): over the last seven days, which combinations of connection type, device model and OS version had the highest feed-loading failure rates and 95th-percentile request-to-render times, broken down by hour?
+
+**Who uses it**: the development team, to know where the feed fails or is slow and what to optimize first.
+
+```mermaid
+flowchart LR
+    A[FeedViewModel starts a load<br/>loadId + start time] --> B[GET /feed]
+    B -- response --> C[render_pending]
+    B -- ApiException --> D[failure + error code]
+    C --> E[FeedScreen draws the list<br/>render time]
+    C -- no render after 60 s --> AB[abandoned]
+    D & E & AB --> F[("feed-load-telemetry.json<br/>connection, device, OS, hour")]
+    F --> G[Last 7 days, grouped<br/>failure rate and p95]
+    G --> H[BQ-01 card in Rendimiento]
+```
+
+**How it is computed**: failure rate = failures ÷ (rendered + failures) per group. The p95 is the nearest-rank percentile of the time from the start of the request to the moment the list is drawn. A load the user abandons (left the screen before the feed was drawn) is counted apart, because leaving the screen is not a technical failure. An empty feed that loads fine counts as a success, not a failure.
+
+**Status**: the data is recorded and summarized on each phone. Answering across all devices requires the backend to receive these records (a `POST /telemetry/feed-loads` endpoint and the aggregation with `percentile_cont(0.95)`); `POST /events/batch` only accepts publication events, so they cannot be sent there. That part is pending with the backend owners.
+
+**Files**: `data/telemetry/FeedLoadTelemetry.kt`, the load and render hooks in `FeedViewModel` and `FeedScreen`, and `FeedLoadingBqCard` in `PerformanceScreen.kt`.
+
+---
+
+## 13. Shake-to-refresh and "Menor fila" — Samuel
+
+**Shake-to-refresh (sensor)**: shaking the phone on "Hoy" reloads the feed. The accelerometer reading is turned into g-force; above 2.7 g counts as a shake, and only one shake every 1.5 seconds is accepted. The listener is registered only while the feed is in the foreground (`LifecycleResumeEffect`), so it does not drain battery in the background, and a shake during a load is ignored. The threshold logic is a pure function with its own tests.
+
+**"Menor fila" (smart feature)**: a third `RecommendationStrategy` in "Elige por mí". It puts first the menus whose wait estimate passes the BQ-06 evidence rule, ordered from shortest to longest wait, and keeps the backend order for ties and for menus without evidence. It uses the server clock, like the rest of the feed, so a wrong phone clock cannot discard valid reports.
+
+**Files**: `data/sensor/ShakeRefreshController.kt`, `ui/feed/RecommendationStrategy.kt`.
+
+---
+
+## 14. Design patterns
 
 ### Observer — Juan José
 
@@ -268,7 +384,7 @@ classDiagram
     class RecommendationStrategy {
         <<interface>>
         +label: String
-        +pick(menus, index) DailyMenu?
+        +pick(menus, index, now) DailyMenu?
     }
     class BestRankedStrategy {
         follows the rank-v1 order
@@ -276,13 +392,17 @@ classDiagram
     class CheapestStrategy {
         lowest price first
     }
+    class FastestWaitStrategy {
+        shortest supported wait · Samuel
+    }
     RecommendationStrategy <|.. BestRankedStrategy
     RecommendationStrategy <|.. CheapestStrategy
+    RecommendationStrategy <|.. FastestWaitStrategy
     FeedViewModel --> RecommendationStrategy : holds the active one
     RecommendScreen --> RecommendationStrategy : pick()
 ```
 
-Two implementations a few lines each, interchangeable at runtime with the chips in "Elige por mí". A hand-implemented pattern, not an annotation or a library piece: our interface, our implementations, each with its own test.
+Three implementations a few lines each, interchangeable at runtime with the chips in "Elige por mí". The third one, "Menor fila", was added by Samuel without touching the screen or the other two: that is the point of the pattern. A hand-implemented pattern, not an annotation or a library piece: our interface, our implementations, each with its own test.
 
 ### Repository — Camilo
 
@@ -311,25 +431,41 @@ ViewModels depend on the contract, never on HTTP. The remote implementation adap
 
 ```mermaid
 classDiagram
+    class AccessTokenProvider {
+        <<interface>>
+        +accessToken() String
+    }
+    class SessionManager {
+        +state StateFlow~AuthState~
+        +signIn(email, password)
+        +signOut()
+        +accessToken() String
+    }
+    class AuthRepository {
+        <<interface>>
+        +signIn() Session
+        +refresh() Session
+        +signOut()
+    }
     AccessTokenProvider <|.. SessionManager
-    ApiClient --> AccessTokenProvider
+    ApiClient --> AccessTokenProvider : asks for a token
     SessionManager --> AuthRepository
     SessionManager --> SessionStore
     AuthRepository <|.. SupabaseAuthRepository
 ```
 
-The problem is token lifecycle coupling. Without this proxy, every repository would need to know whether the access token is valid, when it expires, and how to refresh it. `SessionManager` centralizes that decision behind the existing `AccessTokenProvider` interface. It restores the persisted session, refreshes within a one-minute margin, and uses a `Mutex` so concurrent API requests do not trigger duplicate refreshes. A failed authentication refresh clears the local session and moves the app to `SignedOut`.
+The problem is token lifecycle coupling. Without this proxy, every repository would need to know whether the access token is valid, when it expires, and how to refresh it. `SessionManager` centralizes that decision behind the existing `AccessTokenProvider` interface. It restores the persisted session, refreshes within a one-minute margin, and uses a `Mutex` so concurrent API requests do not trigger duplicate refreshes. A failed authentication refresh clears the local session and moves the app to `SignedOut`. `ApiClient` did not change at all: it already depended on the interface, and `SessionManager` replaced the debug implementation behind it.
 
 Known limitation: DataStore preferences persist the refresh token but do not encrypt it at rest. This must be addressed before production use.
 
 ---
 
-## 11. Tests and validation
+## 15. Tests and validation
 
-Run with `./gradlew :app:testDebugUnitTest` on the JVM without an emulator. The suite has **112 tests**: the 88 from the feed and detail slices plus 24 from Samuel's slice.
+Run with `./gradlew :app:testDebugUnitTest` on October 2, 2026. Real result: **112 tests, 0 failures, 0 skipped**, on the JVM without an emulator: the 88 from the feed and detail slices plus 24 from Samuel's slice.
 
 ```mermaid
-pie title 112 unit tests by area
+pie title 112 unit tests by area, all passing
     "Feed (ViewModel)" : 14
     "Dashboard" : 6
     "BQ-06 wait rule" : 5
@@ -346,7 +482,7 @@ pie title 112 unit tests by area
 
 | Suite | What it proves | Tests | Result |
 | --- | --- | --- | --- |
-| FeedViewModelTest | Backend order kept, expired/closed hidden, empty, error+retry, clear offline, expired session, shared filters across tabs, both strategies, single impression | 14 | PASS |
+| FeedViewModelTest | Backend order kept, expired/closed hidden, empty, error+retry, clear offline, expired session, shared filters across tabs, the two original strategies, single impression | 14 | PASS |
 | PerformanceViewModelTest | Summary, period switch without extra loads, restricted access, expired session, error+retry, insufficient data passed through | 6 | PASS |
 | WaitEvidenceTest | The 3-reports / 30-minutes rule, including the exact edge | 5 | PASS |
 | ApiContractTest | Headers, query parameters, feed and performance decoding, error envelope | 8 | PASS |
@@ -357,14 +493,14 @@ pie title 112 unit tests by area
 | EventPipelineTest | Queue, uploader, deduplication, bounds | 9 | PASS |
 | ProximityTest | Haversine and walking minutes | 4 | PASS |
 | SpanishPresentationTest, FakeReportLoopTest | Formats and fakes | 3 | PASS |
-| SessionManagerTest | Token reuse, single refresh for concurrent callers, auth failure clears the session, server failure keeps it, logout offline | 5 | |
-| SupabaseAuthRepositoryTest | Password grant contract, bad credentials, rate limit, server error | 4 | |
-| LoginViewModelTest | Validation before calling auth, loading to success, double tap ignored | 2 | |
-| ProfileViewModelTest | Profile content, error and retry | 2 | |
-| AppShellViewModelTest | Role error and retry, demo profile, no reload on token refresh | 3 | |
-| ShakeRefreshControllerTest | Shake threshold and throttle | 3 | |
-| RecommendationStrategySamuelTest | "Menor fila" order and BQ-06 evidence rule | 2 | |
-| FeedLoadTelemetryTest | p95, grouping, failure rate with abandoned loads apart | 3 | |
+| SessionManagerTest | Token reuse, single refresh for concurrent callers, auth failure clears the session, server failure keeps it, logout offline | 5 | PASS |
+| SupabaseAuthRepositoryTest | Password grant contract, bad credentials, rate limit, server error | 4 | PASS |
+| LoginViewModelTest | Validation before calling auth, loading to success, double tap ignored | 2 | PASS |
+| ProfileViewModelTest | Profile content, error and retry | 2 | PASS |
+| AppShellViewModelTest | Role error and retry, demo profile, no reload on token refresh | 3 | PASS |
+| ShakeRefreshControllerTest | Shake threshold and throttle | 3 | PASS |
+| RecommendationStrategySamuelTest | "Menor fila" order and BQ-06 evidence rule | 2 | PASS |
+| FeedLoadTelemetryTest | p95, grouping, failure rate with abandoned loads apart | 3 | PASS |
 
 There are no instrumented UI tests (Compose/emulator); visual validation is done by hand on the emulator with the demo data.
 
@@ -375,7 +511,7 @@ There are no instrumented UI tests (Compose/emulator); visual validation is done
 
 ---
 
-## 12. Implementation decisions
+## 16. Implementation decisions
 
 - **No client-side ranking or metrics**: the backend already orders, explains and aggregates; duplicating that would mean inventing data and drifting away from iOS.
 - **Server clock for freshness**: the phone clock can be wrong; `serverNow` comes in every response, the same decision the detail and iOS made.
@@ -384,4 +520,11 @@ There are no instrumented UI tests (Compose/emulator); visual validation is done
 - **Strategy on the recommendation and nowhere else**: it is the only spot in the feed with genuinely interchangeable criteria; anywhere else it would be decorative.
 - **Offline as a clear error, not a cache**: a team scope decision; the context-aware behavior of this deliverable lives in the detail with the GPS.
 - **Extending `AnalyticsRepository` for the dashboard** instead of creating another repository: same data family, zero duplication.
-
+- **Session behind the existing `AccessTokenProvider`** (Samuel): no repository or `ApiClient` change was needed to go from the debug account to real users.
+- **Refresh one minute early, with a `Mutex`** (Samuel): a token never expires mid-request, and ten parallel requests cause one refresh, not ten.
+- **Only 400/401 log the user out** (Samuel): a 500 or a dropped connection keeps the session; logging out on any error would punish the user for a server problem.
+- **Best-effort sign-out** (Samuel): the local session is always deleted, even if Supabase cannot be reached.
+- **DataStore without encryption** (Samuel): enough for the course, documented as a known limitation for production.
+- **Tabs by role as UX, the backend as the security boundary** (Samuel): the 403 still protects the data.
+- **Abandoned loads apart from failures in BQ-01** (Samuel): a user leaving the screen says nothing about the network or the app.
+- **BQ-01 records on the phone until the backend has an endpoint** (Samuel): `POST /events/batch` only accepts publication events, and sending unknown kinds would just be rejected.
