@@ -85,7 +85,7 @@ fun LoginScreen(
             }
         }
         SolidButton(
-            text = if (state is LoginState.Loading) "Ingresando…" else "Ingresar",
+            title = if (state is LoginState.Loading) "Ingresando…" else "Ingresar",
             onClick = { vm.signIn(email, password) },
             enabled = state !is LoginState.Loading,
         )
