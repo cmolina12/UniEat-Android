@@ -5,9 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** "Elige por mí" → detail: the reason travels in the route and becomes the card's note. */
 class RecommendationNoteTest {
-
     @Test
     fun detailOpenedFromTheFeedHasNoNote() {
         val route = Detail("m")

@@ -27,9 +27,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.time.Instant
 
-/** Checks models and ApiClient against the samples in docs/api-v1.md. */
 class ApiContractTest {
-
     private val config = SupabaseConfig("https://demo.supabase.co", "sb_publishable_test")
 
     private fun client(status: HttpStatusCode, body: String, seen: MutableList<HttpRequestData>): ApiClient {
@@ -91,7 +89,6 @@ class ApiContractTest {
         assertNull(menu.reports[0].resolvedAt)
         assertEquals(Instant.parse("2026-09-29T17:15:00.000Z"), menu.reports[1].resolvedAt)
 
-        // Contract → BQ-05: only the pending location report counts; the missing photo is flagged.
         val guidance = co.edu.uniandes.unieat.core.decision.locationGuidance(menu)
         assertEquals(1, guidance.pendingLocationReports)
         assertEquals(setOf(co.edu.uniandes.unieat.core.decision.LocationReference.PHOTO), guidance.missing)
@@ -157,7 +154,7 @@ class ApiContractTest {
         assertEquals("/functions/v1/api-v1/performance", seen[0].url.encodedPath)
         assertEquals("/functions/v1/api-v1/restaurant/performance", seen[1].url.encodedPath)
         assertEquals("28", seen[1].url.parameters["days"])
-        assertEquals(listOf("all", "all"), seen.map { it.url.parameters["platform"] }) // iOS and Android events
+        assertEquals(listOf("all", "all"), seen.map { it.url.parameters["platform"] })
         assertEquals("all", summary.platform)
     }
 
@@ -167,7 +164,7 @@ class ApiContractTest {
             co.edu.uniandes.unieat.core.model.PerformanceSummary.serializer(),
             """{"periodDays":7,"impressions":1,"detailOpens":1,"selections":0,"reportedArrivals":0,"sampleSize":1}""",
         )
-        assertNull(summary.platform) // the screen labels this "solo eventos de la app iOS"
+        assertNull(summary.platform)
     }
 
     @Test
@@ -189,7 +186,6 @@ class ApiContractTest {
         assertEquals(1, bq05.coverage.establishments)
     }
 
-    /** GET /admin/dashboard per docs/api-v1.md: only `bq05` is decoded, the rest is ignored. */
     @Test
     fun adminDashboardDecodesBq05ByPlatform() = runTest {
         val seen = mutableListOf<HttpRequestData>()
@@ -272,7 +268,6 @@ class ApiContractTest {
     }
 
     private companion object {
-        /** GET /menus/:id 200 per docs/api-v1.md (BQ-04): DailyMenu + status, explanation and reports. */
         const val DETAIL_SAMPLE = """
         {
           "serverNow": "2026-09-29T17:20:34.728Z",

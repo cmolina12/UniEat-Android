@@ -17,7 +17,6 @@ import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 
-// Placeholder destinations. Each one moves to its own feature package with a ViewModel when built.
 // The Feed ("Hoy") and "Elige por mí" live in ui/feed; "Rendimiento" lives in ui/performance.
 
 @Composable

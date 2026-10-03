@@ -16,13 +16,6 @@ import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
 
-/**
- * Pending analytics events, persisted as JSON in app-private storage so they survive the app
- * being closed while offline. Plain JVM code (java.io / java.nio), so it is unit-tested with a temp folder.
- *
- * Bounded on purpose: at most [maxEvents] (oldest dropped first), and events older than [maxAge]
- * are discarded because api-v1 rejects `occurredAt` more than 7 days old.
- */
 class EventQueue(
     private val file: File,
     private val maxEvents: Int = 1_000,
@@ -39,7 +32,6 @@ class EventQueue(
         while (events.size > maxEvents) events.removeAt(0)
     }
 
-    /** The oldest [limit] events, without removing them (removed only after the server confirms). */
     suspend fun peek(limit: Int): List<RemoteEvent> = locked { it.take(limit) }
 
     suspend fun remove(eventIds: Set<String>) = mutate { events -> events.removeAll { it.eventId in eventIds } }
@@ -64,12 +56,11 @@ class EventQueue(
     private fun read(): MutableList<RemoteEvent> = try {
         if (file.exists()) UniEatJson.decodeFromString(serializer, file.readText()).toMutableList() else mutableListOf()
     } catch (e: SerializationException) {
-        mutableListOf() // corrupted file: start over rather than crash on every launch
+        mutableListOf()
     } catch (e: IllegalArgumentException) {
         mutableListOf()
     }
 
-    /** Write to a temp file, then rename: a crash mid-write never leaves half a JSON file. */
     private fun save(events: List<RemoteEvent>) {
         try {
             file.parentFile?.mkdirs()
@@ -77,7 +68,6 @@ class EventQueue(
             tmp.writeText(UniEatJson.encodeToString(serializer, events))
             Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: IOException) {
-            // Disk full or similar: the in-memory copy still uploads during this session.
         }
     }
 }

@@ -27,7 +27,6 @@ import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MenuDetailViewModelTest {
-
     private val dispatcher = StandardTestDispatcher()
     private val serverNow = Instant.parse("2026-09-29T17:00:00Z")
 
@@ -39,7 +38,7 @@ class MenuDetailViewModelTest {
     fun startsLoadingThenShowsContentWithClockOffset() = runTest(dispatcher) {
         val menu = menu()
         val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), RecordingTracker(), StubReports()) {
-            serverNow - Duration.ofSeconds(90) // device clock 90 s behind the server
+            serverNow - Duration.ofSeconds(90)
         }
         assertEquals(MenuDetailUiState.Loading, vm.state.value)
 
@@ -65,7 +64,6 @@ class MenuDetailViewModelTest {
         advanceUntilIdle()
         val offline = vm.state.value as MenuDetailUiState.Error
         assertEquals(ApiException.OFFLINE, offline.code)
-        // The detail keeps no cached copy, so it must not promise one (the feed's shared text does).
         assertEquals(MenuDetailViewModel.OFFLINE_MESSAGE, offline.message)
         assertFalse(offline.message.contains("copia"))
 
@@ -81,7 +79,7 @@ class MenuDetailViewModelTest {
         val menu = menu().copy(version = 3)
         val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu) }, StubLocation(), tracker, StubReports()) { serverNow }
         advanceUntilIdle()
-        vm.load() // retry / pull-to-refresh must not count a second opening
+        vm.load()
         advanceUntilIdle()
 
         assertEquals(
@@ -105,7 +103,7 @@ class MenuDetailViewModelTest {
         advanceUntilIdle()
 
         vm.onArrivalAnswered(true)
-        vm.onArrivalAnswered(true) // double tap
+        vm.onArrivalAnswered(true)
 
         assertEquals(listOf(EventKind.DETAIL_OPEN, EventKind.ARRIVAL), tracker.events.map { it.kind })
         assertEquals("arrival_prompt", tracker.events.last().source)
@@ -144,7 +142,7 @@ class MenuDetailViewModelTest {
         }, StubLocation(), tracker, StubReports())
         advanceUntilIdle()
 
-        assertEquals(MenuDetailUiState.SessionExpired, vm.state.value) // the screen sends the user to the login
+        assertEquals(MenuDetailUiState.SessionExpired, vm.state.value)
         assertEquals(emptyList<RecordingTracker.Tracked>(), tracker.events)
     }
 

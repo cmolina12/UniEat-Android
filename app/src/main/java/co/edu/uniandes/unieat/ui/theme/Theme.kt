@@ -9,7 +9,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/** Brand colors, same values as `Palette` in Theme.swift. */
 object Palette {
     val Yellow = Color(0xFFFFE500)
     val Cyan = Color(0xFF19D3E8)
@@ -20,7 +19,6 @@ object Palette {
     val Paper = Color.White
 }
 
-// iOS is light-only with ink text on bright fills; Android mirrors that.
 private val UniEatColors = lightColorScheme(
     primary = Palette.Ink,
     onPrimary = Color.White,
@@ -39,7 +37,6 @@ private val UniEatColors = lightColorScheme(
     onError = Palette.Ink,
 )
 
-// iOS uses SF Rounded heavy weights; Android uses the system font with the same sizes/weights.
 private val UniEatTypography = Typography(
     headlineSmall = TextStyle(fontSize = 23.sp, fontWeight = FontWeight.ExtraBold),
     titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.ExtraBold),

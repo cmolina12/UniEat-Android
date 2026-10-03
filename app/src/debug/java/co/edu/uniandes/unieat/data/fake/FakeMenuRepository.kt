@@ -12,15 +12,10 @@ import co.edu.uniandes.unieat.data.repository.MenuRepository
 import kotlinx.coroutines.delay
 import java.time.Instant
 
-/**
- * In-memory [MenuRepository] for development without login. Answers like api-v1 does for a student:
- * 404 for unknown ids and 410 GONE for expired menus. Owner-only operations are rejected.
- */
 class FakeMenuRepository(
     private val latencyMillis: Long = 400,
     private val clock: () -> Instant = Instant::now,
 ) : MenuRepository {
-
     override suspend fun feed(filters: FeedFilters): FeedResponse {
         delay(latencyMillis)
         val now = clock()

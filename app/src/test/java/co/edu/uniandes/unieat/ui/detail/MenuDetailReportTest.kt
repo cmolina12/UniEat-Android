@@ -23,10 +23,8 @@ import org.junit.Test
 import java.time.Duration
 import java.time.Instant
 
-/** Report sheet behaviour of [MenuDetailViewModel] (POST /reports). */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MenuDetailReportTest {
-
     private val dispatcher = StandardTestDispatcher()
     private val now = Instant.parse("2026-09-29T17:00:00Z")
 
@@ -34,7 +32,6 @@ class MenuDetailReportTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    /** The "server" menu; tests add reports to it to simulate what GET /menus/:id returns next. */
     private var serverMenu = DailyMenu(
         id = "m", title = "Tazón", version = 2, validUntil = now + Duration.ofHours(1), publishedAt = now,
         establishmentId = "e", establishmentName = "Bowls", area = "Centro", lowestPriceCop = 12_000,
@@ -87,7 +84,6 @@ class MenuDetailReportTest {
         advanceUntilIdle()
         assertEquals(0, (vm.state.value as MenuDetailUiState.Content).location.pendingLocationReports)
 
-        // What the server will return after accepting the report.
         serverMenu = serverMenu.copy(reports = listOf(MenuReport("r1", ReportKind.LOCATION, "pending", now)), pendingReports = 1)
         vm.submitReport(ReportKind.LOCATION, "", null)
         advanceUntilIdle()
@@ -162,7 +158,7 @@ class MenuDetailReportTest {
         val vm = viewModel()
         advanceUntilIdle()
 
-        vm.onArrivalAnswered(true) // from the "¿Ya llegaste?" prompt
+        vm.onArrivalAnswered(true)
         vm.submitReport(ReportKind.ARRIVAL, "", null)
         advanceUntilIdle()
 

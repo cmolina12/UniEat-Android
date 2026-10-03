@@ -10,9 +10,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.time.Instant
 
-/** Debug fakes only (src/testDebug): a location report from the sheet feeds the BQ-05 warning. */
 class FakeReportLoopTest {
-
     @Test
     fun locationReportBecomesAPendingWarningAndRateLimitApplies() = runTest {
         var now = Instant.parse("2026-09-29T17:00:00Z")
@@ -23,13 +21,12 @@ class FakeReportLoopTest {
 
         val response = reports.submit(ReportBody(ajiaco, 1, ReportKind.LOCATION))
         assertEquals("pending", response.status)
-        reports.submit(ReportBody(ajiaco, 1, ReportKind.ACCURATE)) // observation: not listed
+        reports.submit(ReportBody(ajiaco, 1, ReportKind.ACCURATE))
 
         val after = menus.menu(ajiaco).menu
         assertEquals(before + 1, locationGuidance(after).pendingLocationReports)
         assertEquals(after.reports.count { it.status == "pending" }, after.pendingReports)
 
-        // Third report in 10 min is still fine, the fourth is rate-limited like the server.
         reports.submit(ReportBody(ajiaco, 1, ReportKind.PRICE))
         try {
             reports.submit(ReportBody(ajiaco, 1, ReportKind.PRICE))

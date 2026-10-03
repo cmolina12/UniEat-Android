@@ -12,9 +12,7 @@ import co.edu.uniandes.unieat.core.model.MenusResponse
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import io.ktor.http.HttpMethod
 
-/** [MenuRepository] backed by api-v1 through [ApiClient]. */
 class RemoteMenuRepository(private val api: ApiClient) : MenuRepository {
-
     override suspend fun feed(filters: FeedFilters): FeedResponse =
         api.get("feed", filters.toQuery())
 

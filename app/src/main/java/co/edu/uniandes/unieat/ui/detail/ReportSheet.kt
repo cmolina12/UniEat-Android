@@ -58,7 +58,6 @@ import kotlin.math.roundToInt
 
 private const val NOTE_MAX = 280
 
-/** Choices in the same order and wording as iOS ReportSheet. */
 private val choices: List<Triple<ReportKind, String, ImageVector>> = listOf(
     Triple(ReportKind.UNAVAILABLE, "Plato agotado o no disponible", Icons.Filled.Close),
     Triple(ReportKind.PRICE, "Precio distinto al publicado", Icons.Filled.ShoppingCart),
@@ -68,14 +67,9 @@ private val choices: List<Triple<ReportKind, String, ImageVector>> = listOf(
     Triple(ReportKind.ARRIVAL, "Llegué al local", Icons.Filled.Done),
 )
 
-/** Discrepancies are reviewed by an admin; the rest are observations (api-v1 catalog). */
 private val ReportKind.isDiscrepancy: Boolean
     get() = this == ReportKind.UNAVAILABLE || this == ReportKind.PRICE || this == ReportKind.LOCATION
 
-/**
- * Port of iOS ReportSheet as a Material 3 bottom sheet. The form (kind, note, minutes) is UI state;
- * sending and its result live in [MenuDetailViewModel] as [ReportSubmission].
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportSheet(
@@ -141,7 +135,7 @@ fun ReportSheet(
                         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Palette.Ink, modifier = Modifier.weight(1f))
                         RadioButton(
                             selected = selected,
-                            onClick = null, // the whole row is the click target
+                            onClick = null,
                             colors = RadioButtonDefaults.colors(selectedColor = Palette.Ink, unselectedColor = Palette.Ink),
                         )
                     }
@@ -160,7 +154,7 @@ fun ReportSheet(
                         value = waitMinutes.toFloat(),
                         onValueChange = { waitMinutes = (it / 5).roundToInt() * 5 },
                         valueRange = 0f..120f,
-                        steps = 23, // 0, 5, …, 120 like the iOS stepper
+                        steps = 23,
                         enabled = !sending,
                         colors = SliderDefaults.colors(thumbColor = Palette.Ink, activeTrackColor = Palette.Ink),
                     )

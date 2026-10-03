@@ -23,15 +23,10 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.SerializationException
 import java.io.IOException
 
-/** Supplies the Supabase Auth access token (JWT). Never return the publishable key here. */
 fun interface AccessTokenProvider {
     suspend fun accessToken(): String
 }
 
-/**
- * Adapter over the shared API v1: adds `apikey` and `Authorization: Bearer <jwt>`, sends/reads
- * camelCase JSON and turns every failure into [ApiException]. Port of iOS APIClient.
- */
 class ApiClient(
     private val config: SupabaseConfig,
     private val tokenProvider: AccessTokenProvider,
@@ -55,7 +50,6 @@ class ApiClient(
         }
     }.decode()
 
-    /** Sends the request and returns it only if 2xx; otherwise throws the decoded [ApiException]. */
     @PublishedApi
     internal suspend fun execute(
         method: HttpMethod,
@@ -71,7 +65,6 @@ class ApiClient(
             http.request("${config.apiBaseUrl}/${path.trimStart('/')}") {
                 this.method = method
                 header("apikey", config.publishableKey)
-                // Lets the server attribute reports, feed and detail requests to Android (not "unknown").
                 header(PLATFORM_HEADER, PLATFORM)
                 token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 query.forEach { (name, value) -> if (value != null) parameter(name, value) }
@@ -98,7 +91,6 @@ class ApiClient(
             val envelope = UniEatJson.decodeFromString<ApiErrorEnvelope>(response.bodyAsText())
             ApiException(envelope.error, status)
         } catch (e: IllegalArgumentException) {
-            // Non-JSON body (e.g. gateway HTML) or missing "error" envelope.
             ApiException.unexpected(status, e)
         }
     }

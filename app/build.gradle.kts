@@ -7,7 +7,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Supabase settings live in the git-ignored local.properties (see local.properties.example).
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use(::load)

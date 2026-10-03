@@ -5,9 +5,6 @@ import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.Instant
 
-// Port of UniEatCore/Models.swift. Ids are UUID strings; dates use InstantSerializer.
-// Fields the iOS model lacks but api-v1 sends (status, closedAt, travel*, reports...) are optional.
-
 @Serializable
 data class MenuDish(
     val id: String,
@@ -53,7 +50,6 @@ data class DailyMenu(
 ) {
     fun isActive(at: Instant = Instant.now()): Boolean = publishedAt <= at && validUntil > at
 
-    /** queue-v1 freshness: >= 3 samples and newest report at most 30 minutes old. */
     fun hasWaitEvidence(at: Instant = Instant.now()): Boolean {
         val newest = waitNewestReportAt ?: return false
         if (waitSampleCount < 3 || waitMinutes == null) return false
@@ -75,7 +71,6 @@ enum class TravelEvidence {
     @SerialName("unknown") UNKNOWN,
 }
 
-/** A report shown in menu detail (no author or note). */
 @Serializable
 data class MenuReport(
     val id: String,
@@ -113,11 +108,9 @@ data class PerformanceSummary(
     val reportedArrivals: Int,
     val sampleSize: Int = 0,
     val insufficientData: Boolean = true,
-    /** Clients counted: "ios", "android" or "all". Null means a backend without `?platform=` (iOS only). */
     val platform: String? = null,
 )
 
-/** BQ-05 location reports of one platform, by their current moderation status. */
 @Serializable
 data class LocationReportCounts(
     val pending: Int = 0,
@@ -125,7 +118,6 @@ data class LocationReportCounts(
     val dismissed: Int = 0,
 )
 
-/** BQ-05 signals of one platform: Maps opens, self-reported arrivals and location reports. */
 @Serializable
 data class LocationSignals(
     val locationOpens: Int = 0,
@@ -133,7 +125,6 @@ data class LocationSignals(
     val locationReports: LocationReportCounts = LocationReportCounts(),
 )
 
-/** Location references every establishment has (or lacks) right now, independent of the period. */
 @Serializable
 data class LocationCoverage(
     val establishments: Int = 0,
@@ -145,10 +136,6 @@ data class LocationCoverage(
     val withoutPhoto: Int = 0,
 )
 
-/**
- * `bq05` of GET /admin/dashboard. Unlike [PerformanceSummary] it is split by platform;
- * [unknown] holds records sent without the X-UniEat-Platform header.
- */
 @Serializable
 data class LocationGuidanceSnapshot(
     val periodDays: Int,
@@ -158,7 +145,6 @@ data class LocationGuidanceSnapshot(
     val coverage: LocationCoverage = LocationCoverage(),
 )
 
-/** GET /admin/dashboard: only `bq05` is read; BQ-03, BQ-04 and engagement are ignored here. */
 @Serializable
 data class AdminDashboardResponse(val bq05: LocationGuidanceSnapshot? = null)
 

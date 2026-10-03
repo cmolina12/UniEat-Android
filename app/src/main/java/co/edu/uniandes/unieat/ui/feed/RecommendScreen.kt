@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
  */
 @Composable
 fun RecommendScreen(
-    /** Opens the detail with the criterion and the backend's explanation of why it was picked. */
     onOpenMenu: (menuId: String, criterion: String, reason: String) -> Unit,
     onSessionExpired: () -> Unit,
     viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory()),

@@ -43,23 +43,14 @@ import org.osmdroid.views.overlay.Polygon
 import java.io.File
 import kotlin.math.roundToInt
 
-/** Conventional "you are here" blue, distinct from the brand colors used for the restaurant. */
 private val UserBlue = Color(0xFF1A73E8)
 
-/** Beyond this, fitting both points would zoom out too far to recognise the restaurant's street. */
 private const val FIT_BOTH_MAX_METERS = 3_000.0
 
-/** Below this the two dots overlap; just center on the restaurant. */
 private const val SAME_SPOT_METERS = 15.0
 
-/** Fixes this vague get a translucent accuracy circle (e.g. "approximate" permission). */
 private const val SHOW_ACCURACY_ABOVE_METERS = 25f
 
-/**
- * OpenStreetMap tile map (osmdroid's View wrapped in [AndroidView]) with the restaurant at [point]
- * and, when known, the student at [user]. It is a still preview: panning is off so the detail page
- * keeps scrolling over it, and the camera frames both dots by itself as the GPS updates.
- */
 @Composable
 fun OsmMap(
     point: Coordinate,
@@ -69,11 +60,8 @@ fun OsmMap(
     userAccuracyMeters: Float? = null,
 ) {
     Box(modifier.background(Palette.Cream)) {
-        // Previews cannot create a MapView; show the frame only.
         if (!LocalInspectionMode.current) MapViewHost(point, title, user, userAccuracyMeters)
 
-        // Topmost sibling gets the touches instead of the MapView and does not consume them,
-        // so the parent verticalScroll still scrolls.
         Box(
             Modifier
                 .matchParentSize()
@@ -82,7 +70,6 @@ fun OsmMap(
 
         MapLegend(showUser = user != null, modifier = Modifier.align(Alignment.TopStart))
 
-        // Required by the OSM tile usage policy.
         Text(
             "© OpenStreetMap contributors",
             fontSize = 10.sp,
@@ -124,7 +111,6 @@ private fun LegendDot(fill: Color, stroke: Color, modifier: Modifier = Modifier)
     )
 }
 
-/** The MapView and the overlays it reuses on every GPS update (no re-creation per fix). */
 private class MapHolder(
     val map: MapView,
     val restaurant: Marker,
@@ -154,7 +140,7 @@ private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, use
                 icon = dot(context, UserBlue, Color.White, sizeDp = 16, strokeDp = 3)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 setInfoWindow(null)
-                this.title = "Tu ubicación" // `this.`: plain `title` is the composable parameter
+                this.title = "Tu ubicación"
             },
             accuracy = Polygon(map).apply {
                 fillPaint.color = UserBlue.copy(alpha = 0.15f).toArgb()
@@ -165,7 +151,6 @@ private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, use
         )
     }
 
-    // MapView needs the Activity lifecycle to start/stop tile loading and release resources.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, holder) {
         val observer = LifecycleEventObserver { _, event ->
@@ -188,7 +173,6 @@ private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, use
 
         holder.restaurant.position = pin
         holder.restaurant.title = title
-        // Draw order: accuracy circle, restaurant, student on top.
         map.overlays.clear()
         if (me != null && userAccuracyMeters != null && userAccuracyMeters > SHOW_ACCURACY_ABOVE_METERS) {
             holder.accuracy.points = Polygon.pointsAsCircle(me, userAccuracyMeters.toDouble())
@@ -204,7 +188,6 @@ private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, use
     })
 }
 
-/** Centers on the restaurant, or zooms to show both dots when the student is reasonably close. */
 private fun MapView.frame(pin: GeoPoint, user: GeoPoint?) {
     val apply = {
         val meters = user?.let { pin.distanceToAsDouble(it) }
@@ -216,7 +199,6 @@ private fun MapView.frame(pin: GeoPoint, user: GeoPoint?) {
             zoomToBoundingBox(BoundingBox.fromGeoPoints(listOf(pin, user)), false, border, 18.0, null)
         }
     }
-    // zoomToBoundingBox needs the view's size; before the first layout it would compute a wrong zoom.
     if (isLayoutOccurred) apply() else addOnFirstLayoutListener { _, _, _, _, _ -> apply() }
 }
 
@@ -231,10 +213,6 @@ private fun dot(context: Context, fill: Color, stroke: Color, sizeDp: Int, strok
     }
 }
 
-/**
- * OSM tile servers reject requests without an identifying User-Agent, so it is set to the
- * package name. Tiles are cached in app-private cache (no storage permission needed).
- */
 private fun configureOsmdroid(context: Context) {
     val config = Configuration.getInstance()
     if (config.userAgentValue == context.packageName) return

@@ -7,7 +7,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-/** Port of iOS SpanishPresentation: visible labels and dates in Spanish, domain values unchanged. */
 object SpanishPresentation {
     val locale: Locale = Locale.forLanguageTag("es-CO")
 
@@ -29,14 +28,12 @@ object SpanishPresentation {
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
             .withLocale(locale).withZone(ZoneId.systemDefault()).format(instant)
 
-    /** "menos de 10 m", "350 m" (rounded to 10 m), "1,2 km". */
     fun distance(meters: Double): String = when {
         meters < 10 -> "menos de 10 m"
         meters < 1_000 -> "${(Math.round(meters / 10) * 10).coerceAtMost(990)} m"
         else -> String.format(locale, "%.1f km", meters / 1_000)
     }
 
-    /** "hace 5 min", "hace 2 h", "hace 3 días". A future [instant] (clock skew) reads as "hace un momento". */
     fun relative(instant: Instant, now: Instant): String {
         val minutes = Duration.between(instant, now).toMinutes()
         return when {

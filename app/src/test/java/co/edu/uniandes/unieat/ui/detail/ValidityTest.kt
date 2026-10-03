@@ -6,9 +6,7 @@ import org.junit.Test
 import java.time.Duration
 import java.time.Instant
 
-/** The detail's validity tag at the edges of the 30-minute window. */
 class ValidityTest {
-
     private val now = Instant.parse("2026-10-03T17:00:00Z")
 
     private fun endingIn(left: Duration) = DailyMenu(

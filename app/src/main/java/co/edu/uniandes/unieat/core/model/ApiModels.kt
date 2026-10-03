@@ -4,8 +4,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
-// Request/response envelopes from docs/api-v1.md (UniEat---iOS-Back).
-
 @Serializable
 data class FeedResponse(
     @Serializable(InstantSerializer::class) val serverNow: Instant,
@@ -40,7 +38,6 @@ data class MenuBody(
     val area: String? = null,
     val address: String? = null,
     val entranceDescription: String? = null,
-    /** Only for PUT /menus/:id; the version the user edited. */
     val expectedVersion: Int? = null,
 ) {
     @Serializable
@@ -126,7 +123,6 @@ data class EventBatch(
 data class BatchResponse(
     val accepted: Int,
     val duplicates: Int = 0,
-    /** Events the server will never accept (e.g. UNKNOWN_VERSION); resending them is pointless. */
     val rejected: List<RejectedEvent> = emptyList(),
 )
 

@@ -12,7 +12,6 @@ import androidx.work.WorkerParameters
 import co.edu.uniandes.unieat.UniEatApplication
 import java.util.concurrent.TimeUnit
 
-/** Uploads the queue. WorkManager only starts it with network and retries it with backoff. */
 class EventFlushWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val uploader = (applicationContext as UniEatApplication).container.eventUploader
@@ -23,17 +22,12 @@ class EventFlushWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 }
 
-/**
- * "Retry when back online": the work waits for [NetworkType.CONNECTED], survives app restarts,
- * and backs off exponentially on server errors.
- */
 class WorkManagerFlushScheduler(private val context: Context) : FlushScheduler {
     override fun schedule() {
         val request = OneTimeWorkRequestBuilder<EventFlushWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        // KEEP: a pending upload already sends everything in the queue, new events included.
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
     }
 

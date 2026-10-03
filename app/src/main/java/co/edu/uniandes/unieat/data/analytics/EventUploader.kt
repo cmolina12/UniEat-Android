@@ -14,25 +14,19 @@ import io.ktor.http.HttpMethod
 interface AnalyticsRepository {
     suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse
 
-    /** GET /performance?platform=all — metrics the backend computes from the event pipeline (admin only). */
     suspend fun performance(days: Int): PerformanceSummary
 
-    /** GET /restaurant/performance — same shape, limited to the account's approved establishments. */
     suspend fun restaurantPerformance(days: Int): PerformanceSummary = performance(days)
 
-    /** `bq05` of GET /admin/dashboard (admin only), split by platform; null when unavailable. */
     suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = null
 
-    /** GET /restaurant/location-guidance — the same BQ-05 shape, only the account's establishments. */
     suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot? = null
 }
 
 class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepository {
     override suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse =
-        api.send(HttpMethod.Post, "events/batch", EventBatch(events)) // platform = "android" by default
+        api.send(HttpMethod.Post, "events/batch", EventBatch(events))
 
-    // platform=all: iOS and Android events. A backend without the parameter ignores it and
-    // answers iOS only, with no `platform` field, and the screen labels it that way.
     override suspend fun performance(days: Int): PerformanceSummary =
         api.get("performance", mapOf("days" to days, "platform" to ALL_PLATFORMS))
 
@@ -52,7 +46,6 @@ class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepositor
 
 enum class FlushResult { DONE, RETRY_LATER }
 
-/** Drains [EventQueue] in batches of at most 100 (the api-v1 limit). Called from the WorkManager worker. */
 class EventUploader(
     private val queue: EventQueue,
     private val api: AnalyticsRepository,
@@ -64,15 +57,11 @@ class EventUploader(
             if (batch.isEmpty()) return FlushResult.DONE
             val ids = batch.mapTo(mutableSetOf()) { it.eventId }
             try {
-                // 200 means every event is settled: accepted, duplicate (already counted) or rejected
-                // for good (e.g. UNKNOWN_VERSION). None of them should be sent again.
                 api.sendBatch(batch)
                 queue.remove(ids)
             } catch (e: ApiException) {
                 when (e.code) {
-                    // The batch itself is malformed; retrying would fail forever and block newer events.
                     ApiException.VALIDATION_ERROR -> queue.remove(ids)
-                    // OFFLINE, RATE_LIMITED, AUTH_REQUIRED, 5xx...: keep everything and try again later.
                     else -> return FlushResult.RETRY_LATER
                 }
             }

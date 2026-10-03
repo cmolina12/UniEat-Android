@@ -8,12 +8,6 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import java.time.Duration
 import java.time.Instant
 
-/**
- * Menus 0001–0003 mirror backend `supabase/seed.sql` (same ids, names, coordinates and relative times),
- * so the fake and the real API can be compared side by side. 0004–0006 are fake-only fixtures that
- * cover BQ-05 cases the seed lacks: missing location data, pending location reports, and a 410.
- * Times are relative to [now], like the seed's `now() - interval ...`.
- */
 object SeedMenus {
     const val AJIACO = "10000000-0000-4000-8000-000000000001"
     const val BOWLS = "10000000-0000-4000-8000-000000000002"
@@ -31,7 +25,6 @@ object SeedMenus {
         DemoFixture(EXPIRED, "Vencido · 410"),
     )
 
-    /** The three publications that exist in backend seed.sql, for debug builds on the real API. */
     val seedFixtures = fixtures.take(3)
 
     fun all(now: Instant): List<DailyMenu> {
@@ -52,7 +45,6 @@ object SeedMenus {
                     dish(AJIACO, 1, "Bandeja fríjol campesino", 15_000),
                 ),
                 lowestPriceCop = 14_500,
-                // queue-v1 over the seed observations 6, 8, 10, 9 → median 8.5 → 9.
                 waitMinutes = 9, waitSampleCount = 4, waitNewestReportAt = ago(8),
             ),
             DailyMenu(
@@ -84,10 +76,8 @@ object SeedMenus {
                 ),
                 lowestPriceCop = 9_000,
                 waitMinutes = 5, waitSampleCount = 3, waitNewestReportAt = ago(15),
-                // A pending report of another kind: must NOT trigger the location warning.
                 reports = listOf(report(ELVIRA, 1, ReportKind.PRICE, "pending", ago(20))),
             ),
-            // Fake-only: seed establishment e…0004 (no coordinates, no entrance) with every field missing.
             DailyMenu(
                 id = NUEVO_SABOR, title = "Corrientazo del día",
                 validUntil = until, publishedAt = ago(20),
@@ -99,8 +89,6 @@ object SeedMenus {
                 items = listOf(dish(NUEVO_SABOR, 0, "Sobrebarriga con papa", 11_000)),
                 lowestPriceCop = 11_000,
             ),
-            // Fake-only: full location data, two pending location reports, one already dismissed
-            // and a pending price report. Only the two pending location reports count for BQ-05.
             DailyMenu(
                 id = AREPAS, title = "Arepas rellenas",
                 validUntil = until, publishedAt = ago(90),
@@ -118,7 +106,6 @@ object SeedMenus {
                     report(AREPAS, 4, ReportKind.PRICE, "pending", ago(30)),
                 ),
             ),
-            // Fake-only: expired, so a student gets 410 GONE.
             DailyMenu(
                 id = EXPIRED, title = "Desayuno",
                 validUntil = ago(30), publishedAt = ago(300),

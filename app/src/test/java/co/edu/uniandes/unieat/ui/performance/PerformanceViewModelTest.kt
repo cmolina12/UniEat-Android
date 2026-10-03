@@ -23,7 +23,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PerformanceViewModelTest {
-
     private val dispatcher = StandardTestDispatcher()
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
@@ -116,7 +115,7 @@ class PerformanceViewModelTest {
         val vm = PerformanceViewModel(analytics, role = "restaurant")
         advanceUntilIdle()
 
-        assertEquals(listOf("restaurant"), calls) // GET /performance is admin-only: never called
+        assertEquals(listOf("restaurant"), calls)
         val content = vm.state.value as PerformanceUiState.Content
         assertEquals(3, content.summary.impressions)
         assertEquals(true, content.ownEstablishmentsOnly)
@@ -131,7 +130,7 @@ class PerformanceViewModelTest {
         vm.selectDays(28)
         advanceUntilIdle()
 
-        assertEquals(listOf(7, 28), seenDays) // BQ-05 follows the selected period
+        assertEquals(listOf(7, 28), seenDays)
         val content = vm.state.value as PerformanceUiState.Content
         assertEquals(guidance(28), content.locationGuidance)
         assertEquals(false, content.ownEstablishmentsOnly)
@@ -148,7 +147,7 @@ class PerformanceViewModelTest {
         val vm = PerformanceViewModel(analytics, role = "restaurant", showLocationGuidance = true)
         advanceUntilIdle()
 
-        assertEquals(listOf("restaurant"), calls) // GET /admin/dashboard is admin-only: never called
+        assertEquals(listOf("restaurant"), calls)
         assertEquals(1, (vm.state.value as PerformanceUiState.Content).locationGuidance?.android?.locationOpens)
     }
 
@@ -184,7 +183,6 @@ class PerformanceViewModelTest {
         private val onRestaurant: (suspend (Int) -> PerformanceSummary)? = null,
         private val onLocation: (suspend (Int) -> LocationGuidanceSnapshot?)? = null,
         private val onRestaurantLocation: (suspend (Int) -> LocationGuidanceSnapshot?)? = null,
-        // Last, so the existing tests can keep passing it as a trailing lambda.
         private val onPerformance: suspend (Int) -> PerformanceSummary,
     ) : AnalyticsRepository {
         override suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse = error("unused")
