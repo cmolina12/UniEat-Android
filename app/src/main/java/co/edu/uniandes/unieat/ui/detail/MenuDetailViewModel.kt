@@ -59,6 +59,9 @@ sealed interface MenuDetailUiState {
     /** 410 GONE: the menu closed or expired. Not retryable. */
     data class Gone(val message: String) : MenuDetailUiState
 
+    /** AUTH_REQUIRED: the screen navigates back to the login, like the feed does. */
+    data object SessionExpired : MenuDetailUiState
+
     data class Error(val message: String, val code: String) : MenuDetailUiState
 }
 
@@ -179,6 +182,7 @@ class MenuDetailViewModel(
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
+                    ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
                     else -> MenuDetailUiState.Error(e.error.message, e.code)
                 }
             }

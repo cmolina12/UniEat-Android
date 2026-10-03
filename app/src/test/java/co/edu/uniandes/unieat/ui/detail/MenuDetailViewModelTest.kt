@@ -132,6 +132,18 @@ class MenuDetailViewModelTest {
     }
 
     @Test
+    fun authRequiredBecomesSessionExpiredAndTracksNothing() = runTest(dispatcher) {
+        val tracker = RecordingTracker()
+        val vm = MenuDetailViewModel("m", StubRepository {
+            throw apiError(ApiException.AUTH_REQUIRED, "La sesión no es válida o venció.", 401)
+        }, StubLocation(), tracker, StubReports())
+        advanceUntilIdle()
+
+        assertEquals(MenuDetailUiState.SessionExpired, vm.state.value) // the screen sends the user to the login
+        assertEquals(emptyList<RecordingTracker.Tracked>(), tracker.events)
+    }
+
+    @Test
     fun selectionIsTracked() = runTest(dispatcher) {
         val tracker = RecordingTracker()
         val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
