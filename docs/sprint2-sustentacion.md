@@ -2,7 +2,7 @@
 
 Supporting document for the deliverable and the viva voce. Everything here comes from the repository's code, its git history, and real test runs. Where something is missing, the document says so.
 
-Team members on this client: Camilo Molina and Juan José Murillo. Samuel David Rozo is joining and his sections are marked as pending.
+Team members on this client: Camilo Molina, Juan José Murillo and Samuel David Rozen Mogollon.
 
 ---
 
@@ -17,7 +17,7 @@ The Android client consumes the same Supabase API v1 as the iOS app. What is wor
 - The **GPS sensor** in the detail: live walking distance to the restaurant, a "Tú" marker on the map, and the "¿Ya llegaste?" prompt within 50 meters. Context-aware for real: a different UI for each permission and GPS state.
 - Community reports (`POST /reports`) from the detail.
 - The **analytics pipeline**: event queue persisted on disk, WorkManager to drain it when online, batched upload to `POST /events/batch`.
-- Backend connectivity: `ApiClient` with the API's error envelope, and the debug test account (`DevTokenProvider`) while Login does not exist.
+- Backend connectivity: `ApiClient` with the API error envelope and authenticated access tokens supplied by `SessionManager`.
 
 **By Juan José Murillo** (commits "Fase 1–3" of the feed, Strategy, and the dashboard, on the feed-today branch):
 
@@ -29,7 +29,16 @@ The Android client consumes the same Supabase API v1 as the iOS app. What is wor
 - The **`feed_impression`** events (deduplicated per session) on top of the existing pipeline.
 - The **metrics dashboard** in the "Rendimiento" tab (`GET /performance`).
 
-**Pending for the team**: the real Login with Supabase Auth (today a placeholder plus the debug test account), the Publicar and Perfil tabs, role-based tab visibility, and Samuel David Rozo's slice.
+**Samuel David Rozen Mogollon:**
+
+- Supabase email/password Login and sign-out.
+- Persisted session through `SessionStore` and transparent token refresh through `SessionManager`.
+- `GET /me` profile screen with loading, content, error and retry states.
+- **Proxy** pattern: `ApiClient` depends on `AccessTokenProvider`; `SessionManager` decides whether to return, restore or refresh a token.
+- BQ-01 client instrumentation records feed-loading outcomes, connection, device, OS and request-to-render timing. Cross-device aggregation still depends on a shared backend ingestion endpoint.
+- Sensor contribution: shake-to-refresh uses the accelerometer only while the feed is resumed and does not start a second request while loading.
+- Smart-feature contribution: “Menor fila” reuses BQ-06’s evidence rule and ranks only supported wait estimates using the server-aligned clock.
+- Context-aware contribution: tabs adapt to the authenticated role from `GET /me`; profile loading has an explicit retry state.
 
 ---
 
@@ -66,7 +75,7 @@ One sentence per block. The UI only draws what the state says and never touches 
 
 Dependency injection is manual: `AppContainer` builds one instance of each piece and ViewModel factories read from it. No Hilt, because with this size a hand-made container is easier to explain and to test.
 
-**Why this shape**: all 91 unit tests run on the JVM without an emulator, because every decision lives in ViewModels and plain Kotlin, never in composables. Heavy computation (ranking, wait aggregation, report moderation) stays on the backend; the client contributes only what the phone alone knows: GPS, permission state, and the local event queue.
+**Why this shape**: unit tests run on the JVM without an emulator because business decisions live in ViewModels and plain Kotlin rather than composables. Heavy computation (ranking, wait aggregation, report moderation) stays on the backend; the client contributes only what the phone alone knows: GPS, permission state, and the local event queue.
 
 ---
 
@@ -298,18 +307,29 @@ classDiagram
 
 ViewModels depend on the contract, never on HTTP. The remote implementation adapts the API; the debug fake answers with seeded data and the same error codes (404, 410, 403). This is what makes stub-based tests and the demo mode possible.
 
-### Pattern by Samuel David Rozo
+### Proxy — Samuel David Rozen Mogollon
 
-Pending.
+```mermaid
+classDiagram
+    AccessTokenProvider <|.. SessionManager
+    ApiClient --> AccessTokenProvider
+    SessionManager --> AuthRepository
+    SessionManager --> SessionStore
+    AuthRepository <|.. SupabaseAuthRepository
+```
+
+The problem is token lifecycle coupling. Without this proxy, every repository would need to know whether the access token is valid, when it expires, and how to refresh it. `SessionManager` centralizes that decision behind the existing `AccessTokenProvider` interface. It restores the persisted session, refreshes within a one-minute margin, and uses a `Mutex` so concurrent API requests do not trigger duplicate refreshes. A failed authentication refresh clears the local session and moves the app to `SignedOut`.
+
+Known limitation: DataStore preferences persist the refresh token but do not encrypt it at rest. This must be addressed before production use.
 
 ---
 
 ## 11. Tests and validation
 
-Run with `./gradlew :app:testDebugUnitTest` on October 2, 2026. Real result: **91 tests, 0 failures, 0 skipped**, on the JVM without an emulator.
+Run with `./gradlew :app:testDebugUnitTest` on the JVM without an emulator. The suite has **112 tests**: the 88 from the feed and detail slices plus 24 from Samuel's slice.
 
 ```mermaid
-pie title 91 unit tests by area, all passing
+pie title 112 unit tests by area
     "Feed (ViewModel)" : 14
     "Dashboard" : 6
     "BQ-06 wait rule" : 5
@@ -318,7 +338,9 @@ pie title 91 unit tests by area, all passing
     "BQ-05 location" : 11
     "Analytics pipeline" : 9
     "Proximity / GPS math" : 4
-    "Debug auth" : 3
+    "Auth, session and profile" : 16
+    "BQ-01 telemetry" : 3
+    "Shake and Menor fila" : 5
     "Formatting and fakes" : 3
 ```
 
@@ -334,8 +356,15 @@ pie title 91 unit tests by area, all passing
 | LocationGuidanceTest | BQ-05 references and warnings | 11 | PASS |
 | EventPipelineTest | Queue, uploader, deduplication, bounds | 9 | PASS |
 | ProximityTest | Haversine and walking minutes | 4 | PASS |
-| DevTokenProviderTest | Debug test account | 3 | PASS |
 | SpanishPresentationTest, FakeReportLoopTest | Formats and fakes | 3 | PASS |
+| SessionManagerTest | Token reuse, single refresh for concurrent callers, auth failure clears the session, server failure keeps it, logout offline | 5 | |
+| SupabaseAuthRepositoryTest | Password grant contract, bad credentials, rate limit, server error | 4 | |
+| LoginViewModelTest | Validation before calling auth, loading to success, double tap ignored | 2 | |
+| ProfileViewModelTest | Profile content, error and retry | 2 | |
+| AppShellViewModelTest | Role error and retry, demo profile, no reload on token refresh | 3 | |
+| ShakeRefreshControllerTest | Shake threshold and throttle | 3 | |
+| RecommendationStrategySamuelTest | "Menor fila" order and BQ-06 evidence rule | 2 | |
+| FeedLoadTelemetryTest | p95, grouping, failure rate with abandoned loads apart | 3 | |
 
 There are no instrumented UI tests (Compose/emulator); visual validation is done by hand on the emulator with the demo data.
 

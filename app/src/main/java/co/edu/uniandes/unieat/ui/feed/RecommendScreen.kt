@@ -80,14 +80,15 @@ fun RecommendScreen(
             is FeedUiState.Content -> {
                 val content = state as FeedUiState.Content
                 // Strategy pattern: the active criterion picks among the backend's options
-                val recommended = strategy.pick(content.menus, index)
+                val serverNow = rememberServerNow(content.clockOffset)
+                val recommended = strategy.pick(content.menus, index, serverNow)
                 if (recommended == null) {
                     EmptyFeedCard()
                 } else {
                     FiltersSummaryCard(filters, content.menus.size)
                     Text("Criterio", style = MaterialTheme.typography.titleMedium, color = Palette.Ink)
                     ChipRow(
-                        options = listOf(BestRankedStrategy, CheapestStrategy),
+                        options = listOf(BestRankedStrategy, CheapestStrategy, FastestWaitStrategy),
                         isSelected = { it == strategy },
                         label = { it.label },
                         onSelect = viewModel::selectStrategy,
@@ -98,7 +99,7 @@ fun RecommendScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     // The card already shows the backend's explanation: the "why" of the ranking.
-                    MenuCard(recommended, rememberServerNow(content.clockOffset), onClick = { onOpenMenu(recommended.id) })
+                    MenuCard(recommended, serverNow, onClick = { onOpenMenu(recommended.id) })
                     SolidButton("Elegir otra opción", onClick = viewModel::nextRecommendation, color = Palette.Cyan)
                     SolidButton(
                         "Ver publicación completa",
