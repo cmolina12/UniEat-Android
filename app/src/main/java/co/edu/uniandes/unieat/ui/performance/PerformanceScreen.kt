@@ -46,8 +46,14 @@ import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 @Composable
 fun PerformanceScreen(
     role: String?,
+    userId: String?,
     onSessionExpired: () -> Unit,
-    viewModel: PerformanceViewModel = viewModel(factory = PerformanceViewModel.factory(role)),
+    // Keyed by account: the tab bar restores saved tab state, so without the key the next account
+    // to sign in would get the previous account's ViewModel (and its metrics).
+    viewModel: PerformanceViewModel = viewModel(
+        key = "performance:$userId:$role",
+        factory = PerformanceViewModel.factory(role),
+    ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val days by viewModel.days.collectAsStateWithLifecycle()
@@ -197,7 +203,7 @@ private fun FeedLoadingBqCard(report: FeedLoadReport?) {
 /**
  * Camilo — BQ-05: location guidance from `bq05` of GET /admin/dashboard (admins) or
  * GET /restaurant/location-guidance (restaurants, only their establishments).
- * The only block split by platform; "Sin plataforma" holds records sent without the header.
+ * The only block split by platform; "Sin dato" holds records sent without the platform header.
  */
 @Composable
 private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstablishmentsOnly: Boolean) {
@@ -213,12 +219,19 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstabl
         Text("BQ-05 · Orientación de ubicación", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
         val scope = if (ownEstablishmentsOnly) "Tus establecimientos" else "Todos los establecimientos"
         Text("$scope · todas las plataformas · últimos ${snapshot.periodDays} días", style = MaterialTheme.typography.bodySmall)
-        TableRow(listOf("", "iOS", "Android", "Sin plataforma"), header = true)
+        TableRow(listOf("", "iOS", "Android", "Sin dato"), header = true)
         rows.forEach { (label, pick) -> TableRow(listOf(label) + columns.map { pick(it).toString() }) }
+        Text(
+            "Sin dato: registros enviados sin la marca de plataforma (por ejemplo, versiones viejas de la app).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         val c = snapshot.coverage
         Text(
-            "Referencias en ${c.establishments} establecimientos (hoy, sin importar el periodo)",
+            "Referencias en ${c.establishments} " + (if (c.establishments == 1) "establecimiento" else "establecimientos") +
+                " (hoy, sin importar el periodo)",
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -236,7 +249,7 @@ private fun TableRow(cells: List<String>, header: Boolean = false) {
         cells.forEachIndexed { i, cell ->
             Text(
                 cell,
-                modifier = Modifier.weight(if (i == 0) 1.6f else 1f),
+                modifier = Modifier.weight(if (i == 0) 2.2f else 1f),
                 textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (header) FontWeight.Bold else FontWeight.Normal,
