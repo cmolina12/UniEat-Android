@@ -3,7 +3,10 @@ package co.edu.uniandes.unieat.ui.theme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -121,6 +124,33 @@ fun SurfaceCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.
             .padding(14.dp),
         content = content,
     )
+}
+
+/** One row of selectable chips, same look as the stickers. Used by filters, criteria and periods. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun <T> ChipRow(
+    options: List<T>,
+    isSelected: (T) -> Boolean,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { option ->
+            val selected = isSelected(option)
+            Text(
+                label(option),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Palette.Ink,
+                modifier = Modifier
+                    .background(if (selected) Palette.Yellow else Palette.Paper, CircleShape)
+                    .border(1.4.dp, Palette.Ink, CircleShape)
+                    .clickable { onSelect(option) }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
+    }
 }
 
 @Composable

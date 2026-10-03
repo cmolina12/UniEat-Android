@@ -18,7 +18,7 @@ import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 
 // Placeholder destinations. Each one moves to its own feature package with a ViewModel when built.
-// The Feed ("Hoy") and "Elige por mí" already live in ui/feed.
+// The Feed ("Hoy") and "Elige por mí" live in ui/feed; "Rendimiento" lives in ui/performance.
 
 @Composable
 fun LoginScreen(onSignedIn: () -> Unit) = Placeholder("Ingresar", "Inicio de sesión con Supabase Auth.") {
@@ -27,9 +27,6 @@ fun LoginScreen(onSignedIn: () -> Unit) = Placeholder("Ingresar", "Inicio de ses
 
 @Composable
 fun PublishScreen() = Placeholder("Publicar", "Crear o editar el menú del día (POST/PUT /menus).")
-
-@Composable
-fun PerformanceScreen() = Placeholder("Rendimiento", "Impresiones, aperturas y selecciones (GET /performance).")
 
 @Composable
 fun ProfileScreen(onSignOut: () -> Unit) = Placeholder("Mi perfil", "Datos de GET /me y preferencias.") {

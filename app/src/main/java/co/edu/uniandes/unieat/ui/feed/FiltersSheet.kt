@@ -1,15 +1,9 @@
 package co.edu.uniandes.unieat.ui.feed
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.edu.uniandes.unieat.core.model.FeedFilters
+import co.edu.uniandes.unieat.ui.theme.ChipRow
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.cop
@@ -116,29 +111,3 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium, color = Palette.Ink)
 }
 
-/** One row of selectable chips, same look as the fixture picker in the detail screen. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun <T> ChipRow(
-    options: List<T>,
-    isSelected: (T) -> Boolean,
-    label: (T) -> String,
-    onSelect: (T) -> Unit,
-) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { option ->
-            val selected = isSelected(option)
-            Text(
-                label(option),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Palette.Ink,
-                modifier = Modifier
-                    .background(if (selected) Palette.Yellow else Palette.Paper, CircleShape)
-                    .border(1.4.dp, Palette.Ink, CircleShape)
-                    .clickable { onSelect(option) }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-            )
-        }
-    }
-}
