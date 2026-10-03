@@ -39,6 +39,7 @@ import co.edu.uniandes.unieat.ui.auth.LoginViewModel
 import co.edu.uniandes.unieat.ui.auth.ProfileScreen
 import co.edu.uniandes.unieat.ui.auth.ProfileViewModel
 import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
+import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
@@ -105,8 +106,10 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 )
             }
             composable<Detail> {
+                val route = it.toRoute<Detail>()
                 MenuDetailScreen(
-                    menuId = it.toRoute<Detail>().menuId,
+                    menuId = route.menuId,
+                    recommendation = RecommendationNote.from(route.recommendedBy, route.recommendationReason),
                     onBack = navController::popBackStack,
                     // Swaps the current detail for another one (debug fixture picker).
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
@@ -114,7 +117,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             }
             composable<Recommend> {
                 RecommendScreen(
-                    onOpenMenu = { navController.navigate(Detail(it)) },
+                    onOpenMenu = { id, criterion, reason -> navController.navigate(Detail(id, criterion, reason)) },
                     onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
                 )
             }

@@ -43,7 +43,8 @@ import androidx.compose.ui.platform.LocalContext
  */
 @Composable
 fun RecommendScreen(
-    onOpenMenu: (String) -> Unit,
+    /** Opens the detail with the criterion and the backend's explanation of why it was picked. */
+    onOpenMenu: (menuId: String, criterion: String, reason: String) -> Unit,
     onSessionExpired: () -> Unit,
     viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory()),
 ) {
@@ -99,11 +100,11 @@ fun RecommendScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     // The card already shows the backend's explanation: the "why" of the ranking.
-                    MenuCard(recommended, serverNow, onClick = { onOpenMenu(recommended.id) })
+                    MenuCard(recommended, serverNow, onClick = { onOpenMenu(recommended.id, strategy.label, recommended.explanation) })
                     SolidButton("Elegir otra opción", onClick = viewModel::nextRecommendation, color = Palette.Cyan)
                     SolidButton(
                         "Ver publicación completa",
-                        onClick = { onOpenMenu(recommended.id) },
+                        onClick = { onOpenMenu(recommended.id, strategy.label, recommended.explanation) },
                         icon = Icons.Filled.Star,
                         color = Palette.Green,
                     )
