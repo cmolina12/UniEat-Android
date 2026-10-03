@@ -252,7 +252,7 @@ Why a disk queue: a student without signal is the normal case on campus. Events 
 
 ## 9. Metrics dashboard — Juan José
 
-The "Rendimiento" tab is the other end of the pipeline: one screen with the metrics the backend computes via `GET /performance?days=7|28` — impressions, detail opens, selections, reported arrivals — and a period selector. The client computes no metric. If the backend flags `insufficientData`, the screen says so instead of presenting numbers as reliable; if the account has no role for the endpoint (it belongs to restaurants and admins), it shows "Acceso restringido" with the backend message instead of breaking.
+The "Rendimiento" tab is the other end of the pipeline: one screen with the metrics the backend computes via `GET /performance?days=7|28` for admins or `GET /restaurant/performance?days=7|28` for restaurants (their own establishments) — impressions, detail opens, selections, reported arrivals — and a period selector. The backend computes these from iOS events only, and the screen labels them that way. The client computes no metric. If the backend flags `insufficientData`, the screen says so instead of presenting numbers as reliable; if the account has no role for the endpoint, it shows "Acceso restringido" with the backend message instead of breaking.
 
 **Files**: `ui/performance/PerformanceViewModel.kt`, `ui/performance/PerformanceScreen.kt`, and the `performance(days)` method added to the existing `AnalyticsRepository` (no new repository). Each member adds their BQ's card here; the BQ-01 card is already in place (section 12).
 
