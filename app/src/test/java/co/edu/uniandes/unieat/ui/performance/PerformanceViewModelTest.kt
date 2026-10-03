@@ -1,6 +1,8 @@
 package co.edu.uniandes.unieat.ui.performance
 
 import co.edu.uniandes.unieat.core.model.BatchResponse
+import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
+import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
@@ -15,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -103,15 +106,75 @@ class PerformanceViewModelTest {
         assertEquals(true, content.summary.insufficientData) // the backend decides, we only show it
     }
 
+    @Test
+    fun restaurantReadsItsOwnEstablishmentsEndpoint() = runTest(dispatcher) {
+        val calls = mutableListOf<String>()
+        val analytics = StubAnalytics(
+            onPerformance = { calls += "performance"; summary(it) },
+            onRestaurant = { calls += "restaurant"; summary(it).copy(impressions = 3) },
+        )
+        val vm = PerformanceViewModel(analytics, role = "restaurant")
+        advanceUntilIdle()
+
+        assertEquals(listOf("restaurant"), calls) // GET /performance is admin-only: never called
+        val content = vm.state.value as PerformanceUiState.Content
+        assertEquals(3, content.summary.impressions)
+        assertEquals(true, content.ownEstablishmentsOnly)
+    }
+
+    @Test
+    fun adminGetsTheBq05LocationCard() = runTest(dispatcher) {
+        val seenDays = mutableListOf<Int>()
+        val analytics = StubAnalytics(onPerformance = { summary(it) }, onLocation = { seenDays += it; guidance(it) })
+        val vm = PerformanceViewModel(analytics, role = "admin", showLocationGuidance = true)
+        advanceUntilIdle()
+        vm.selectDays(28)
+        advanceUntilIdle()
+
+        assertEquals(listOf(7, 28), seenDays) // BQ-05 follows the selected period
+        val content = vm.state.value as PerformanceUiState.Content
+        assertEquals(guidance(28), content.locationGuidance)
+        assertEquals(false, content.ownEstablishmentsOnly)
+    }
+
+    @Test
+    fun bq05IsNotRequestedWhenHidden() = runTest(dispatcher) {
+        var requested = false
+        val vm = PerformanceViewModel(StubAnalytics(onRestaurant = { summary(it) }, onLocation = { requested = true; guidance(it) }) { summary(it) }, role = "restaurant")
+        advanceUntilIdle()
+        assertEquals(false, requested)
+        assertNull((vm.state.value as PerformanceUiState.Content).locationGuidance)
+    }
+
+    @Test
+    fun bq05FailureKeepsTheOtherMetrics() = runTest(dispatcher) {
+        val analytics = StubAnalytics(onPerformance = { summary(it) }, onLocation = { throw ApiException.offline() })
+        val vm = PerformanceViewModel(analytics, role = "admin", showLocationGuidance = true)
+        advanceUntilIdle()
+        assertEquals(PerformanceUiState.Content(summary(7)), vm.state.value)
+    }
+
+    private fun guidance(days: Int) = LocationGuidanceSnapshot(
+        periodDays = days,
+        ios = LocationSignals(locationOpens = 2),
+        android = LocationSignals(locationOpens = 5, reportedArrivals = 1),
+    )
+
     private fun summary(days: Int) = PerformanceSummary(
         periodDays = days, impressions = 48, detailOpens = 21, selections = 9,
         reportedArrivals = 5, sampleSize = 48, insufficientData = false,
     )
 
     private class StubAnalytics(
+        private val onRestaurant: (suspend (Int) -> PerformanceSummary)? = null,
+        private val onLocation: (suspend (Int) -> LocationGuidanceSnapshot?)? = null,
+        // Last, so the existing tests can keep passing it as a trailing lambda.
         private val onPerformance: suspend (Int) -> PerformanceSummary,
     ) : AnalyticsRepository {
         override suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse = error("unused")
         override suspend fun performance(days: Int): PerformanceSummary = onPerformance(days)
+        override suspend fun restaurantPerformance(days: Int): PerformanceSummary =
+            onRestaurant?.invoke(days) ?: error("restaurant endpoint not expected")
+        override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = onLocation?.invoke(days)
     }
 }

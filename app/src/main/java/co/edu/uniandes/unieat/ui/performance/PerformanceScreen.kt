@@ -21,12 +21,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
+import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.SCOPE_THIS_DEVICE
@@ -39,11 +42,12 @@ import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 
-/** BQ dashboard: the pipeline metrics from GET /performance, all visible on one screen. */
+/** BQ dashboard: the pipeline metrics (GET /performance or /restaurant/performance), all on one screen. */
 @Composable
 fun PerformanceScreen(
+    role: String?,
     onSessionExpired: () -> Unit,
-    viewModel: PerformanceViewModel = viewModel(factory = PerformanceViewModel.factory()),
+    viewModel: PerformanceViewModel = viewModel(factory = PerformanceViewModel.factory(role)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val days by viewModel.days.collectAsStateWithLifecycle()
@@ -106,16 +110,23 @@ private fun PerformanceContent(
                 body = state.message,
             ) { SolidButton("Reintentar", onClick = onRetry, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
             is PerformanceUiState.Content -> {
-                SummaryCards(state.summary)
+                SummaryCards(state.summary, state.ownEstablishmentsOnly)
                 FeedLoadingBqCard(state.feedLoadReport)
+                state.locationGuidance?.let { LocationGuidanceBqCard(it) }
             }
         }
     }
 }
 
 @Composable
-private fun SummaryCards(summary: PerformanceSummary) {
+private fun SummaryCards(summary: PerformanceSummary, ownEstablishmentsOnly: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // The backend computes these from iOS events only; Android's own events are not in them yet.
+        Text(
+            if (ownEstablishmentsOnly) "Tus establecimientos · solo eventos de la app iOS" else "Todos los establecimientos · solo eventos de la app iOS",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (summary.insufficientData) {
             FeedStatusCard(
                 title = "Datos insuficientes",
@@ -132,7 +143,7 @@ private fun SummaryCards(summary: PerformanceSummary) {
             MetricCard("Llegadas", summary.reportedArrivals, Modifier.weight(1f))
         }
         Text(
-            "Periodo de ${summary.periodDays} días · ${summary.sampleSize} eventos en total",
+            "Periodo de ${summary.periodDays} días · ${summary.sampleSize} sesiones distintas con eventos",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -174,6 +185,55 @@ private fun FeedLoadingBqCard(report: FeedLoadReport?) {
         }
         if (report.groups.size > 5) {
             Text("Se muestran los 5 grupos con mayor tasa de fallo/latencia.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * Camilo — BQ-05: location guidance from `bq05` of GET /admin/dashboard (admin only).
+ * The only block split by platform; "Sin plataforma" holds records sent without the header.
+ */
+@Composable
+private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot) {
+    val columns = listOf(snapshot.ios, snapshot.android, snapshot.unknown)
+    val rows: List<Pair<String, (LocationSignals) -> Int>> = listOf(
+        "Aperturas de Maps" to { it.locationOpens },
+        "Llegadas reportadas" to { it.reportedArrivals },
+        "Reportes pendientes" to { it.locationReports.pending },
+        "Reportes confirmados" to { it.locationReports.confirmed },
+        "Reportes descartados" to { it.locationReports.dismissed },
+    )
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-05 · Orientación de ubicación", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        Text("Todas las plataformas · últimos ${snapshot.periodDays} días", style = MaterialTheme.typography.bodySmall)
+        TableRow(listOf("", "iOS", "Android", "Sin plataforma"), header = true)
+        rows.forEach { (label, pick) -> TableRow(listOf(label) + columns.map { pick(it).toString() }) }
+
+        val c = snapshot.coverage
+        Text(
+            "Referencias en ${c.establishments} establecimientos (hoy, sin importar el periodo)",
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        TableRow(listOf("", "Tienen", "Les falta"), header = true)
+        TableRow(listOf("Coordenadas", "${c.withCoordinates}", "${c.withoutCoordinates}"))
+        TableRow(listOf("Indicación de entrada", "${c.withEntranceDescription}", "${c.withoutEntranceDescription}"))
+        TableRow(listOf("Foto", "${c.withPhoto}", "${c.withoutPhoto}"))
+    }
+}
+
+/** First cell is the label (wider); the rest are right-aligned numbers. */
+@Composable
+private fun TableRow(cells: List<String>, header: Boolean = false) {
+    Row(Modifier.fillMaxWidth()) {
+        cells.forEachIndexed { i, cell ->
+            Text(
+                cell,
+                modifier = Modifier.weight(if (i == 0) 1.6f else 1f),
+                textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (header) FontWeight.Bold else FontWeight.Normal,
+            )
         }
     }
 }

@@ -145,6 +145,46 @@ class ApiContractTest {
     }
 
     @Test
+    fun performanceUsesTheRoleEndpoint() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val body = """{"periodDays":7,"impressions":1,"detailOpens":1,"selections":0,"reportedArrivals":0,
+            "savedMenus":0,"locationOpens":0,"reports":0,"sampleSize":1,"insufficientData":true,"rates":null}"""
+        val repo = co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository(client(HttpStatusCode.OK, body, seen))
+
+        repo.performance(7)
+        repo.restaurantPerformance(28)
+
+        assertEquals("/functions/v1/api-v1/performance", seen[0].url.encodedPath)
+        assertEquals("/functions/v1/api-v1/restaurant/performance", seen[1].url.encodedPath)
+        assertEquals("28", seen[1].url.parameters["days"])
+    }
+
+    /** GET /admin/dashboard per docs/api-v1.md: only `bq05` is decoded, the rest is ignored. */
+    @Test
+    fun adminDashboardDecodesBq05ByPlatform() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val body = """{"platform":"ios","periodDays":7,"bq03":{"feedRequests":4},"bq04":{"detailRequests":2},
+            "engagement":{"impressions":1},
+            "bq05":{"periodDays":7,"generatedAt":"2026-10-03T12:00:00Z",
+              "ios":{"locationOpens":3,"reportedArrivals":1,"locationReports":{"pending":1,"confirmed":0,"dismissed":0}},
+              "android":{"locationOpens":2,"reportedArrivals":1,"locationReports":{"pending":0,"confirmed":1,"dismissed":0}},
+              "unknown":{"locationOpens":0,"reportedArrivals":0,"locationReports":{"pending":0,"confirmed":0,"dismissed":0}},
+              "coverage":{"establishments":4,"withCoordinates":3,"withoutCoordinates":1,"withEntranceDescription":2,
+                "withoutEntranceDescription":2,"withPhoto":0,"withoutPhoto":4}}}"""
+        val repo = co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository(client(HttpStatusCode.OK, body, seen))
+
+        val bq05 = repo.locationGuidance(7)!!
+
+        assertEquals("/functions/v1/api-v1/admin/dashboard", seen.single().url.encodedPath)
+        assertEquals("7", seen.single().url.parameters["days"])
+        assertEquals(2, bq05.android.locationOpens)
+        assertEquals(1, bq05.android.locationReports.confirmed)
+        assertEquals(1, bq05.ios.locationReports.pending)
+        assertEquals(1, bq05.coverage.withoutCoordinates)
+        assertEquals(4, bq05.coverage.withoutPhoto)
+    }
+
+    @Test
     fun eventBatchEncodesPlatformAndMillis() {
         val json = UniEatJson.encodeToString(
             EventBatch.serializer(),

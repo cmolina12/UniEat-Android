@@ -121,6 +121,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             composable<Publish> { PublishScreen() }
             composable<Performance> {
                 PerformanceScreen(
+                    role = role,
                     onSessionExpired = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
                 )
             }
