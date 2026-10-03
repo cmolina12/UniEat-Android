@@ -9,15 +9,10 @@ import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
 
-/**
- * Debug [ReportRepository] that follows the api-v1 rules for a student: validation, rate limits
- * (3 per menu every 10 min, 20 per hour) and the same messages as handlers/reports.ts.
- */
 class FakeReportRepository(
     private val latencyMillis: Long = 600,
     private val clock: () -> Instant = Instant::now,
 ) : ReportRepository {
-
     override suspend fun submit(body: ReportBody): ReportResponse {
         delay(latencyMillis)
         val now = clock()

@@ -10,10 +10,6 @@ import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 
-/**
- * Debug stand-in for POST /events/batch while there is no login: prints each batch to Logcat
- * (`adb logcat -s UniEatEvents`) and accepts it. The queue and WorkManager in front of it are the real ones.
- */
 class LoggingAnalyticsRepository : AnalyticsRepository {
     override suspend fun sendBatch(events: List<RemoteEvent>): BatchResponse {
         events.forEach { Log.i(TAG, "${it.kind} ${it.publicationId} v${it.version} ${it.occurredAt} ${it.metadata} id=${it.eventId}") }
@@ -36,7 +32,6 @@ class LoggingAnalyticsRepository : AnalyticsRepository {
         )
     }
 
-    /** Demo BQ-05 numbers; real ones come from `bq05` of GET /admin/dashboard. */
     override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot {
         val scale = if (days >= 28) 4 else 1
         return LocationGuidanceSnapshot(

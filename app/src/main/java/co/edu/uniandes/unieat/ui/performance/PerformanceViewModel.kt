@@ -22,10 +22,6 @@ import kotlinx.coroutines.launch
 sealed interface PerformanceUiState {
     data object Loading : PerformanceUiState
 
-    /**
-     * Metrics computed by the backend for the selected period. [ownEstablishmentsOnly] is true when
-     * [summary] comes from GET /restaurant/performance; [locationGuidance] is the BQ-05 card.
-     */
     data class Content(
         val summary: PerformanceSummary,
         val feedLoadReport: FeedLoadReport? = null,
@@ -43,21 +39,15 @@ sealed interface PerformanceUiState {
 }
 
 /**
- * Loads the metrics through [AnalyticsRepository] and maps the outcome to [PerformanceUiState].
- * Restaurants read their own establishments (GET /restaurant/performance and /restaurant/location-guidance);
- * admins read every establishment (GET /performance and `bq05` of GET /admin/dashboard).
  * The numbers come from the backend's event pipeline; nothing is computed on the client.
  */
 class PerformanceViewModel(
     private val repository: AnalyticsRepository,
     /** BQ-01 (Samuel): its card is extra; if it fails, the rest of the dashboard still loads. */
     private val feedLoads: FeedLoadRepository? = null,
-    /** Effective role from GET /me; it only picks the endpoint, the backend still authorizes. */
     private val role: String? = null,
-    /** BQ-05 (Camilo): admins, restaurants and demo mode load it; students never reach this tab. */
     private val showLocationGuidance: Boolean = false,
 ) : ViewModel() {
-
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
 
@@ -92,7 +82,6 @@ class PerformanceViewModel(
     private suspend fun feedLoadReport(): FeedLoadReport? =
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
-    /** BQ-05 card: optional like BQ-01, so a failure here never hides the other metrics. */
     private suspend fun locationGuidance(days: Int, restaurant: Boolean): LocationGuidanceSnapshot? {
         if (!showLocationGuidance) return null
         return runCatching {

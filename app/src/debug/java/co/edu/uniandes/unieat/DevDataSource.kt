@@ -16,9 +16,7 @@ object DevDataSource {
 
     fun reportRepository(): ReportRepository = FakeReportRepository()
 
-    /** All sample menus, including the fake-only BQ-05 cases (0004–0006). */
     val fixtures: List<DemoFixture> = SeedMenus.fixtures
 
-    /** Only the menus that really exist in backend seed.sql (0001–0003). */
     val seedFixtures: List<DemoFixture> = SeedMenus.seedFixtures
 }

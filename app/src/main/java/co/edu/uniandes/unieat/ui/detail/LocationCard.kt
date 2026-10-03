@@ -47,7 +47,6 @@ import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 import java.time.Duration
 import java.time.Instant
 
-/** Label shown instead of a blank when a BQ-05 reference is missing. */
 private val LocationReference.missingLabel: String
     get() = when (this) {
         LocationReference.PIN -> "Ubicación no confirmada"
@@ -56,10 +55,6 @@ private val LocationReference.missingLabel: String
         LocationReference.PHOTO -> "Sin foto del local"
     }
 
-/**
- * BQ-05 location card: renders [guidance] as-is (the decision lives in `locationGuidance()`).
- * Pending reports are shown as unverified warnings, never as changes to the published location.
- */
 @Composable
 fun LocationCard(
     guidance: LocationGuidance,
@@ -142,7 +137,6 @@ fun LocationCard(
                     icon = Icons.Filled.Place,
                     color = Palette.Cyan,
                 )
-                // Without a pin, a text search for the published address is still useful.
                 address != null -> SolidButton(
                     "Buscar la dirección en Google Maps",
                     onClick = {
@@ -206,10 +200,6 @@ private fun MissingReference(reference: LocationReference) {
     }
 }
 
-/**
- * Opens Google Maps with a `geo:` URI (no API key). Falls back to any maps app, then to the
- * Google Maps website, so the button never crashes on devices without Google Maps.
- */
 private fun openMaps(context: Context, pin: Coordinate?, address: String?, label: String) {
     val query = if (pin != null) "${pin.latitude},${pin.longitude}(${label})" else address.orEmpty()
     val center = if (pin != null) "${pin.latitude},${pin.longitude}" else "0,0"
@@ -228,7 +218,6 @@ private fun openMaps(context: Context, pin: Coordinate?, address: String?, label
             context.startActivity(intent)
             return
         } catch (_: ActivityNotFoundException) {
-            // Try the next option.
         }
     }
 }

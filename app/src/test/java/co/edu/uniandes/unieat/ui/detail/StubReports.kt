@@ -5,7 +5,6 @@ import co.edu.uniandes.unieat.core.model.ReportResponse
 import co.edu.uniandes.unieat.data.repository.ReportRepository
 import java.time.Instant
 
-/** Test double: records bodies; [result] decides the answer (throw for errors). */
 internal class StubReports(
     var result: (ReportBody) -> ReportResponse = { body ->
         val pending = body.kind.name in setOf("UNAVAILABLE", "PRICE", "LOCATION")

@@ -22,10 +22,8 @@ import org.junit.Test
 import java.time.Duration
 import java.time.Instant
 
-/** Context-aware behaviour of [MenuDetailViewModel.distance]. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MenuDetailDistanceTest {
-
     private val dispatcher = StandardTestDispatcher()
     private val now = Instant.parse("2026-09-29T17:00:00Z")
     private val pin = Coordinate(4.6036, -74.0640)
@@ -42,7 +40,7 @@ class MenuDetailDistanceTest {
             RecordingTracker(),
             StubReports(),
         ) { now }
-        backgroundScope.launch { vm.distance.collect {} } // like the screen collecting it
+        backgroundScope.launch { vm.distance.collect {} }
         advanceUntilIdle()
         return vm
     }
@@ -74,7 +72,6 @@ class MenuDetailDistanceTest {
         advanceUntilIdle()
         assertEquals(DistanceStatus.PermissionDenied(permanently = false), vm.distance.value)
 
-        // Coming back to the screen keeps the "no" instead of nagging again.
         vm.onLocationPermissionChecked(LocationPermission.NONE)
         advanceUntilIdle()
         assertEquals(DistanceStatus.PermissionDenied(permanently = false), vm.distance.value)
@@ -93,7 +90,6 @@ class MenuDetailDistanceTest {
         advanceUntilIdle()
         assertEquals(DistanceStatus.LocationOff, vm.distance.value)
 
-        // Quick-settings tile: no onResume, the flow alone must react.
         location.enabled.value = true
         advanceUntilIdle()
         assertEquals(DistanceStatus.Searching, vm.distance.value)
@@ -116,14 +112,14 @@ class MenuDetailDistanceTest {
         assertEquals(DistanceStatus.Searching, vm.distance.value)
         assertEquals(true, location.lastPrecise)
 
-        location.fixes.emit(UserLocation(Coordinate(4.6028, -74.0652), 8f)) // ~160 m
+        location.fixes.emit(UserLocation(Coordinate(4.6028, -74.0652), 8f))
         advanceUntilIdle()
         val far = vm.distance.value as DistanceStatus.Known
         assertEquals(160.0, far.proximity.distanceMeters, 1.0)
         assertFalse(far.proximity.arrived)
         assertFalse(far.approximate)
 
-        location.fixes.emit(UserLocation(Coordinate(4.6038, -74.0640), 8f)) // ~22 m
+        location.fixes.emit(UserLocation(Coordinate(4.6038, -74.0640), 8f))
         advanceUntilIdle()
         assertTrue((vm.distance.value as DistanceStatus.Known).proximity.arrived)
     }

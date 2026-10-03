@@ -11,10 +11,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-/**
- * ISO 8601 UTC with milliseconds (`2026-09-28T17:00:00.000Z`), as api-v1 sends and expects.
- * Also accepts dates without fraction or with an explicit offset, like UniEatDates.decoder() on iOS.
- */
 object InstantSerializer : KSerializer<Instant> {
     private val output = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
@@ -26,7 +22,6 @@ object InstantSerializer : KSerializer<Instant> {
         Instant.from(DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(decoder.decodeString()))
 }
 
-/** Shared JSON settings: extra server fields are ignored, `null` falls back to defaults, nulls are not sent. */
 val UniEatJson = Json {
     ignoreUnknownKeys = true
     coerceInputValues = true

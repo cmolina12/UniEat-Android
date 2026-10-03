@@ -42,14 +42,11 @@ import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 
-/** BQ dashboard: the pipeline metrics (GET /performance or /restaurant/performance), all on one screen. */
 @Composable
 fun PerformanceScreen(
     role: String?,
     userId: String?,
     onSessionExpired: () -> Unit,
-    // Keyed by account: the tab bar restores saved tab state, so without the key the next account
-    // to sign in would get the previous account's ViewModel (and its metrics).
     viewModel: PerformanceViewModel = viewModel(
         key = "performance:$userId:$role",
         factory = PerformanceViewModel.factory(role),
@@ -127,7 +124,6 @@ private fun PerformanceContent(
 @Composable
 private fun SummaryCards(summary: PerformanceSummary, ownEstablishmentsOnly: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // The backend says which clients it counted; an older backend omits it and counts iOS only.
         val clients = when (summary.platform) {
             "all" -> "iOS y Android"
             "android" -> "solo Android"
@@ -160,8 +156,6 @@ private fun SummaryCards(summary: PerformanceSummary, ownEstablishmentsOnly: Boo
         )
     }
 }
-
-
 
 /** Samuel — BQ-01: seven-day technical diagnostic from persisted feed-load telemetry. */
 @Composable
@@ -200,11 +194,6 @@ private fun FeedLoadingBqCard(report: FeedLoadReport?) {
     }
 }
 
-/**
- * Camilo — BQ-05: location guidance from `bq05` of GET /admin/dashboard (admins) or
- * GET /restaurant/location-guidance (restaurants, only their establishments).
- * The only block split by platform; "Sin dato" holds records sent without the platform header.
- */
 @Composable
 private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstablishmentsOnly: Boolean) {
     val columns = listOf(snapshot.ios, snapshot.android, snapshot.unknown)
@@ -242,7 +231,6 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstabl
     }
 }
 
-/** First cell is the label (wider); the rest are right-aligned numbers. */
 @Composable
 private fun TableRow(cells: List<String>, header: Boolean = false) {
     Row(Modifier.fillMaxWidth()) {

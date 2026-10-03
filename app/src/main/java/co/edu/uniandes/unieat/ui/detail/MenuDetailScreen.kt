@@ -79,26 +79,22 @@ import co.edu.uniandes.unieat.ui.theme.cop
 import java.time.Duration
 import java.time.Instant
 
-/** Port of iOS MenuDetailView. Stateful entry point: owns the ViewModel and passes plain state down. */
 @Composable
 fun MenuDetailScreen(
     menuId: String,
     onBack: () -> Unit,
-    /** Set when "Elige por mí" opened this detail: shown above the menu. */
     recommendation: RecommendationNote? = null,
     onOpenMenu: (String) -> Unit,
     onSessionExpired: () -> Unit,
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // Expired session: back to the login, like the feed and "Elige por mí".
     LaunchedEffect(state) {
         if (state is MenuDetailUiState.SessionExpired) onSessionExpired()
     }
     val distance by viewModel.distance.collectAsStateWithLifecycle()
     val arrival by viewModel.arrival.collectAsStateWithLifecycle()
     val report by viewModel.report.collectAsStateWithLifecycle()
-    // Which kind the sheet opened with; null = closed. Saveable so rotation keeps it open.
     var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
     val openReport = { kind: ReportKind ->
         viewModel.onReportSheetOpened()
@@ -111,7 +107,6 @@ fun MenuDetailScreen(
     ) {
         viewModel.onLocationPermissionResult(context.locationPermission(), context.canAskLocationAgain())
     }
-    // Re-check on every resume: the user may have changed the permission or GPS in settings.
     LifecycleResumeEffect(viewModel) {
         viewModel.onLocationPermissionChecked(context.locationPermission())
         onPauseOrDispose {}
@@ -152,7 +147,6 @@ fun MenuDetailScreen(
     }
 }
 
-/** "Elige por mí": why this menu was picked, as the backend explained it in the ranking. */
 @Composable
 private fun RecommendationCard(note: RecommendationNote) {
     SurfaceCard(Modifier.fillMaxWidth()) {
@@ -251,7 +245,6 @@ private fun MenuBody(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Sticker(menu.area, color = Palette.Cyan, icon = Icons.Filled.Place)
-        // Three states, like the feed: the student sees "Por vencer" before travelling to a menu about to end.
         when (val validity = Validity.of(menu, now)) {
             Validity.Active -> Sticker("Vigente", color = Palette.Green, icon = Icons.Filled.CheckCircle)
             is Validity.Expiring -> Sticker("Por vencer · ${validity.minutesLeft} min", color = Palette.Yellow, icon = Icons.Filled.Warning)
@@ -260,7 +253,6 @@ private fun MenuBody(
         if (menu.pendingReports > 0) Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
     }
 
-    // Context-aware: only near the pin, with a precise fix (see core/decision/Proximity.kt).
     val arrived = (distance as? DistanceStatus.Known)?.proximity?.arrived == true
     if (arrived || arrival == ArrivalAnswer.CONFIRMED) {
         ArrivalPrompt(menu.establishmentName, arrival, locationActions.onArrivalAnswered)
@@ -364,14 +356,13 @@ private fun DishCard(dish: MenuDish) {
     }
 }
 
-/** Port of iOS FoodArtwork: decorative banner until establishments have real photos. */
 @Composable
 private fun FoodArtwork(name: String) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clip(RoundedCornerShape(11.dp)) // keeps the decorative circle inside the banner
+            .clip(RoundedCornerShape(11.dp))
             .background(Brush.linearGradient(listOf(Palette.Yellow, Palette.Coral.copy(alpha = 0.8f)))),
     ) {
         Box(
@@ -410,7 +401,6 @@ private fun StatusMessage(title: String, body: String, color: Color, action: @Co
     }
 }
 
-/** Debug only: jump between the fake fixtures to check every BQ-05 case. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FixturePicker(fixtures: List<DemoFixture>, currentMenuId: String, onOpenMenu: (String) -> Unit) {
@@ -441,7 +431,6 @@ private fun Context.locationPermission(): LocationPermission = when {
     else -> LocationPermission.NONE
 }
 
-/** After a denial, false means Android will not show the dialog again ("no volver a preguntar"). */
 private fun Context.canAskLocationAgain(): Boolean {
     val activity = findActivity() ?: return false
     return ActivityCompat.shouldShowRequestPermissionRationale(activity, ACCESS_FINE_LOCATION) ||

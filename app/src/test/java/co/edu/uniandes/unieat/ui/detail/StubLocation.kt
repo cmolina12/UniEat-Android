@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Test double: fixes are pushed with [emit]; [enabled] simulates the system location switch (live). */
 internal class StubLocation(enabled: Boolean = true) : LocationRepository {
     val enabled = MutableStateFlow(enabled)
     val fixes = MutableSharedFlow<UserLocation>(replay = 1)

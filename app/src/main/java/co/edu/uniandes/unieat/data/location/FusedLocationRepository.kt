@@ -21,9 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** [LocationRepository] over Google Play services' FusedLocationProviderClient. */
 class FusedLocationRepository(context: Context) : LocationRepository {
-
     private val appContext = context.applicationContext
     private val client = LocationServices.getFusedLocationProviderClient(appContext)
 
@@ -39,13 +37,11 @@ class FusedLocationRepository(context: Context) : LocationRepository {
             appContext,
             receiver,
             IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION),
-            ContextCompat.RECEIVER_NOT_EXPORTED, // system broadcasts still arrive
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         awaitClose { appContext.unregisterReceiver(receiver) }
     }.distinctUntilChanged()
 
-    // The ViewModel only collects this after the permission check; a later revocation surfaces
-    // as SecurityException, which the ViewModel catches.
     @SuppressLint("MissingPermission")
     override fun locationUpdates(precise: Boolean): Flow<UserLocation> = callbackFlow {
         val priority = if (precise) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
@@ -58,7 +54,6 @@ class FusedLocationRepository(context: Context) : LocationRepository {
             }
         }
 
-        // Show a recent cached fix right away while the first fresh one arrives.
         client.lastLocation.addOnSuccessListener { last ->
             if (last != null && System.currentTimeMillis() - last.time < MAX_CACHED_AGE_MILLIS) {
                 trySend(last.toUserLocation())

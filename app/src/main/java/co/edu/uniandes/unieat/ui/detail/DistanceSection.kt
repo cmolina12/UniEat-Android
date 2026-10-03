@@ -38,22 +38,14 @@ import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 
-/** Location-related callbacks from the detail screen, grouped so they travel together. */
 data class LocationActions(
-    /** Shows the system permission dialog (after our explanation). */
     val onAllow: () -> Unit,
     val onNotNow: () -> Unit,
     val onArrivalAnswered: (arrived: Boolean) -> Unit,
-    /** Opens the report sheet preselected on "location" (feeds the BQ-05 warning). */
     val onReportLocation: () -> Unit,
-    /** A Google Maps button was tapped; [source] is "pin" or "address" (BQ-05 location_open). */
     val onOpenMaps: (source: String) -> Unit,
 )
 
-/**
- * Context-aware distance line inside the location card. Every state that prevents showing a
- * distance says why in one line, and the rest of the card stays usable.
- */
 @Composable
 fun DistanceSection(status: DistanceStatus, actions: LocationActions) {
     val context = LocalContext.current
@@ -120,7 +112,6 @@ fun DistanceSection(status: DistanceStatus, actions: LocationActions) {
     }
 }
 
-/** Shown high on the page when the student is within [ARRIVAL_RADIUS_METERS] of the pin. */
 @Composable
 fun ArrivalPrompt(establishmentName: String, answer: ArrivalAnswer?, onAnswer: (Boolean) -> Unit) {
     when (answer) {
@@ -196,6 +187,5 @@ private fun startSafely(context: Context, intent: Intent) {
     try {
         context.startActivity(intent)
     } catch (_: ActivityNotFoundException) {
-        // Some OEM builds lack these settings screens; the message already explains the situation.
     }
 }

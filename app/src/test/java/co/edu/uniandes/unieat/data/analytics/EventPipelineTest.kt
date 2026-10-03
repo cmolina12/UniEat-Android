@@ -18,10 +18,8 @@ import org.junit.rules.TemporaryFolder
 import java.time.Duration
 import java.time.Instant
 
-/** Queue, uploader and tracker together, on the JVM with a real file in a temp folder. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventPipelineTest {
-
     @get:Rule val tmp = TemporaryFolder()
 
     private var now = Instant.parse("2026-09-29T17:00:00Z")
@@ -34,7 +32,6 @@ class EventPipelineTest {
         kind = "detail_open", occurredAt = at,
     )
 
-    /** Fake server: records batches; [fail] makes the next calls throw. */
     private class FakeApi : AnalyticsRepository {
         val batches = mutableListOf<List<RemoteEvent>>()
         var fail: ApiException? = null
@@ -47,13 +44,11 @@ class EventPipelineTest {
         override suspend fun performance(days: Int) = error("unused in these tests")
     }
 
-    // --- EventQueue ---------------------------------------------------------------------------
-
     @Test
     fun eventsSurviveAProcessRestart() = runTest {
         queue().apply { add(event()); add(event()) }
 
-        val reopened = queue() // new instance reads the file, like a new app process
+        val reopened = queue()
         assertEquals(listOf("e0", "e1"), reopened.peek(10).map { it.eventId })
     }
 
@@ -78,8 +73,6 @@ class EventPipelineTest {
         assertEquals(0, queue().size())
     }
 
-    // --- EventUploader ------------------------------------------------------------------------
-
     @Test
     fun uploadsInBatchesOfAtMost100AndEmptiesTheQueue() = runTest {
         val q = queue()
@@ -101,7 +94,6 @@ class EventPipelineTest {
         assertEquals(FlushResult.RETRY_LATER, EventUploader(q, api).flush())
         assertEquals(3, q.size())
 
-        // Back online: the same event ids are sent (server dedupes by eventId).
         api.fail = null
         assertEquals(FlushResult.DONE, EventUploader(q, api).flush())
         assertEquals(listOf("e0", "e1", "e2"), api.batches.single().map { it.eventId })
@@ -126,8 +118,6 @@ class EventPipelineTest {
         assertEquals(FlushResult.DONE, EventUploader(q, api).flush())
         assertEquals(0, q.size())
     }
-
-    // --- QueuedEventTracker -------------------------------------------------------------------
 
     @Test
     fun trackerBuildsTheContractEventPersistsItAndSchedulesUpload() = runTest(StandardTestDispatcher()) {

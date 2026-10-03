@@ -48,14 +48,9 @@ import co.edu.uniandes.unieat.ui.screens.PublishScreen
 import co.edu.uniandes.unieat.ui.theme.Palette
 import kotlinx.coroutines.launch
 
-/** App navigation graph: Login → tabs (Feed, Recommend, Publish, Performance, Profile) → Detail. */
 @Composable
 fun UniEatNavHost(container: AppContainer, navController: NavHostController = rememberNavController()) {
     val authState by container.sessionManager.state.collectAsStateWithLifecycle()
-    // AUTH_REQUIRED from any screen: clear the local session first, then go to the login.
-    // Navigating alone left the session "signed in" locally, so the login sent the user straight
-    // back to the feed, which got 401 again (an endless login ↔ feed loop when the server revokes
-    // a token the phone still considers valid).
     val scope = rememberCoroutineScope()
     val expireSession: () -> Unit = {
         scope.launch {
@@ -124,7 +119,6 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     menuId = route.menuId,
                     recommendation = RecommendationNote.from(route.recommendedBy, route.recommendationReason),
                     onBack = navController::popBackStack,
-                    // Swaps the current detail for another one (debug fixture picker).
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
                     onSessionExpired = expireSession,
                 )

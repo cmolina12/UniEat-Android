@@ -40,15 +40,11 @@ import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
 import java.util.Locale
 
-// Ports of the reusable views in Theme.swift: BrandHeader, Sticker, SolidButton, SurfaceCard, DemoNotice.
-
 private val SpanishColombia: Locale = Locale.forLanguageTag("es-CO")
 
-/** COP price as shown on iOS: `$12.000`. */
 val Int.cop: String
     get() = "$" + NumberFormat.getIntegerInstance(SpanishColombia).format(this).replace(',', '.')
 
-/** Stand-in for SF Symbol `bolt.fill` (not in material-icons-core). */
 private val Bolt: ImageVector = ImageVector.Builder("Bolt", 24.dp, 24.dp, 24f, 24f).apply {
     path(fill = SolidColor(Color.White)) {
         moveTo(13f, 2f); lineTo(4f, 14f); lineTo(11f, 14f); lineTo(10f, 22f)

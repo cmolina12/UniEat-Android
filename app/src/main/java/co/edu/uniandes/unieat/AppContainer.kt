@@ -37,7 +37,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 
-/** Manual dependency injection: one instance per app, ViewModels get dependencies from here. */
 class AppContainer(
     private val context: Context,
     val config: SupabaseConfig = SupabaseConfig.fromBuildConfig(),
@@ -54,11 +53,8 @@ class AppContainer(
         if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
     }
 
-    // Automatic: debug builds without supabase.url in local.properties run on fake data;
-    // with a backend configured they call api-v1. Release never has fake data.
     private val fakeMenuRepository: MenuRepository? = if (!config.isConfigured) DevDataSource.menuRepository() else null
 
-    /** True when screens run on debug fake data (seed.sql copy) instead of the API. Always false in release. */
     val usesFakeData: Boolean get() = fakeMenuRepository != null
 
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
@@ -86,7 +82,6 @@ class AppContainer(
         (if (usesFakeData) DevDataSource.reportRepository() else null) ?: RemoteReportRepository(apiClient)
     }
 
-    // Analytics pipeline: EventTracker → EventQueue (disk) → WorkManager → EventUploader → POST /events/batch.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val analyticsRepository: AnalyticsRepository by lazy {

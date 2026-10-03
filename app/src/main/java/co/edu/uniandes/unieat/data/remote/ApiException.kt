@@ -3,7 +3,6 @@ package co.edu.uniandes.unieat.data.remote
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
-/** Uniform backend error: `{"error":{"code","message","traceId","field?","details?"}}`. */
 @Serializable
 data class ApiError(
     val code: String,
@@ -16,10 +15,6 @@ data class ApiError(
 @Serializable
 internal data class ApiErrorEnvelope(val error: ApiError)
 
-/**
- * Every ApiClient failure. [error.code] drives the UI reaction; [error.message] is already Spanish.
- * [httpStatus] is null when the request never got a response (offline).
- */
 class ApiException(
     val error: ApiError,
     val httpStatus: Int? = null,

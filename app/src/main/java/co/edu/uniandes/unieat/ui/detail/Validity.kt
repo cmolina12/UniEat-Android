@@ -4,11 +4,9 @@ import co.edu.uniandes.unieat.core.model.DailyMenu
 import java.time.Duration
 import java.time.Instant
 
-/** What the detail's validity tag says. Same 30-minute threshold as the feed's "Menú por vencer". */
 sealed interface Validity {
     data object Active : Validity
 
-    /** [minutesLeft] is rounded up, so the last seconds still read "1 min" until it expires. */
     data class Expiring(val minutesLeft: Long) : Validity
 
     data object Expired : Validity
@@ -16,7 +14,6 @@ sealed interface Validity {
     companion object {
         val EXPIRING_SOON: Duration = Duration.ofMinutes(30)
 
-        /** [now] is the server-adjusted clock (see rememberServerNow), never the raw device time. */
         fun of(menu: DailyMenu, now: Instant): Validity {
             if (!menu.isActive(now)) return Expired
             val left = Duration.between(now, menu.validUntil)
