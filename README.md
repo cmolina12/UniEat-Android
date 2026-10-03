@@ -69,6 +69,7 @@ Other functionality shipped this sprint on the feed slice. The filter sheet with
 | Feed tab | Menus in rank-v1 order. Each card has restaurant, dish, price, area, the BQ-06 wait sticker, a near-expiry warning and the backend explanation. | Juan José Murillo |
 | Filters sheet | Budget slider plus time, diet, area and payment chips. A local draft applied only when the user confirms. | Juan José Murillo |
 | Recommendation tab | Active filters summary, criterion chips, the recommended menu with its explanation and a button to ask for another option. | Juan José Murillo |
+| Performance tab | The BQ dashboard. The metrics from `GET /performance` on one screen, with a period selector of 7 or 28 days, a notice when the backend marks the data as insufficient, and a restricted state for accounts without access. Each member adds the card of their own question here. | Juan José Murillo |
 | Menu detail | Space reserved for Camilo Molina | Camilo Molina |
 | Navigation shell and theme | Space reserved for Camilo Molina | Camilo Molina |
 | | Space reserved for Samuel David Rozo | Samuel David Rozo |
@@ -82,10 +83,14 @@ flowchart LR
     Q --> WM[WorkManager<br/>runs when online]
     WM --> UP[EventUploader<br/>batches of 100]
     UP --> API[POST /events/batch<br/>Supabase API v1]
-    API --> PERF[GET /performance<br/>metrics per establishment]
+    API --> AGG[Backend aggregation<br/>rank-v1 and queue-v1]
+    AGG --> PERF[GET /performance]
+    PERF --> DASH[Performance tab<br/>BQ dashboard in the app]
 ```
 
 The queue, the scheduler and the uploader are owned by Camilo Molina, and their rationale is reserved for him. The feed events on top of the pipeline are owned by Juan José Murillo. The feed records `feed_impression` the first time a card actually becomes visible, once per menu per session, and the detail records `detail_open`, `selection` and `arrival`. Each event gets its id when it is created, so a retried batch can never count twice. In demo mode the same queue and scheduler run against a logging stand-in. Filter Logcat by `UniEatEvents` to watch the events flow.
+
+The other end of the pipeline is visible in the app. The Performance tab is the BQ dashboard, owned by Juan José Murillo. It shows the metrics the backend computes from these events, all on one screen, and the client computes nothing. Role visibility arrives with the Login feature, so today an account without access sees an explicit restricted state instead of the numbers.
 
 ## Architecture
 
@@ -179,4 +184,4 @@ Space reserved for Samuel David Rozo.
 
 ## Verification status
 
-The unit test suite runs green on the JVM with `./gradlew :app:testDebugUnitTest`. There is no CI workflow in this repository yet, so run the suite before opening a pull request. Before presenting, walk through the demo on an emulator. Browse the feed, change the filters, switch the recommendation criterion, open a detail and send a report.
+The unit test suite runs green on the JVM with `./gradlew :app:testDebugUnitTest`. There is no CI workflow in this repository yet, so run the suite before opening a pull request. Before presenting, walk through the demo on an emulator. Browse the feed, change the filters, switch the recommendation criterion, open a detail, send a report and check the metrics on the Performance tab.
