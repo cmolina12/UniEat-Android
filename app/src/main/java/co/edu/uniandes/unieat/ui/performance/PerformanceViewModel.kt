@@ -11,7 +11,7 @@ import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
-import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,7 +39,8 @@ sealed interface PerformanceUiState {
  */
 class PerformanceViewModel(
     private val repository: AnalyticsRepository,
-    private val feedLoadTelemetry: FeedLoadTelemetry? = null,
+    /** BQ-01 (Samuel): its card is extra; if it fails, the rest of the dashboard still loads. */
+    private val feedLoads: FeedLoadRepository? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
@@ -58,7 +59,7 @@ class PerformanceViewModel(
         _state.value = PerformanceUiState.Loading
         viewModelScope.launch {
             _state.value = try {
-                PerformanceUiState.Content(repository.performance(_days.value), feedLoadTelemetry?.report(7))
+                PerformanceUiState.Content(repository.performance(_days.value), feedLoadReport())
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
@@ -69,6 +70,10 @@ class PerformanceViewModel(
         }
     }
 
+    /** BQ-01 always looks at the last seven days, whatever period the other metrics use. */
+    private suspend fun feedLoadReport(): FeedLoadReport? =
+        feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
+
     /** Switch between 7 and 28 days; picking the same period again does nothing. */
     fun selectDays(days: Int) {
         if (_days.value == days) return
@@ -77,10 +82,12 @@ class PerformanceViewModel(
     }
 
     companion object {
+        private const val BQ01_DAYS = 7
+
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                PerformanceViewModel(app.container.analyticsRepository, app.container.feedLoadTelemetry)
+                PerformanceViewModel(app.container.analyticsRepository, app.container.feedLoadRepository)
             }
         }
     }
