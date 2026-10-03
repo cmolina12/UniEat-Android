@@ -83,6 +83,8 @@ import java.time.Instant
 fun MenuDetailScreen(
     menuId: String,
     onBack: () -> Unit,
+    /** Set when "Elige por mí" opened this detail: shown above the menu. */
+    recommendation: RecommendationNote? = null,
     onOpenMenu: (String) -> Unit,
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
 ) {
@@ -128,6 +130,7 @@ fun MenuDetailScreen(
         onRetry = viewModel::load,
         onSelect = viewModel::onSelect,
         onOpenMenu = onOpenMenu,
+        recommendation = recommendation,
     )
 
     val content = state as? MenuDetailUiState.Content
@@ -140,6 +143,16 @@ fun MenuDetailScreen(
             onSubmit = viewModel::submitReport,
             onDismiss = { reportKind = null },
         )
+    }
+}
+
+/** "Elige por mí": why this menu was picked, as the backend explained it in the ranking. */
+@Composable
+private fun RecommendationCard(note: RecommendationNote) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("Por qué te lo recomendamos", style = MaterialTheme.typography.titleMedium)
+        note.criterion?.let { Text("Criterio: $it", style = MaterialTheme.typography.bodySmall) }
+        Text(note.reason, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -157,6 +170,7 @@ private fun MenuDetailContent(
     onRetry: () -> Unit,
     onSelect: () -> Unit,
     onOpenMenu: (String) -> Unit,
+    recommendation: RecommendationNote? = null,
 ) {
     Column(
         Modifier
@@ -177,9 +191,12 @@ private fun MenuDetailContent(
             MenuDetailUiState.Loading -> Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) {
                 CircularProgressIndicator(color = Palette.Ink)
             }
-            is MenuDetailUiState.Content -> MenuBody(
-                state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
-            )
+            is MenuDetailUiState.Content -> {
+                recommendation?.let { RecommendationCard(it) }
+                MenuBody(
+                    state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
+                )
+            }
             is MenuDetailUiState.Gone -> StatusMessage(
                 title = state.message,
                 body = "Vuelve a la lista de menús para ver opciones vigentes.",

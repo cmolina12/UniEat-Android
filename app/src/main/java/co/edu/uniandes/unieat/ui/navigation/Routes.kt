@@ -13,7 +13,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable object Login
 @Serializable object Feed
-@Serializable data class Detail(val menuId: String)
+/** [recommendedBy] and [recommendationReason] are set only when "Elige por mí" opens the detail. */
+@Serializable data class Detail(
+    val menuId: String,
+    val recommendedBy: String? = null,
+    val recommendationReason: String? = null,
+)
 @Serializable object Recommend
 @Serializable object Publish
 @Serializable object Performance
