@@ -10,8 +10,9 @@ import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val container = (application as UniEatApplication).container
         setContent {
-            UniEatTheme { UniEatNavHost() }
+            UniEatTheme { UniEatNavHost(container = container) }
         }
     }
 }

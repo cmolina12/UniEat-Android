@@ -14,6 +14,7 @@ import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +32,7 @@ sealed interface FeedUiState {
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
      */
-    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration) : FeedUiState
+    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration, val loadId: String? = null) : FeedUiState
 
     /** AUTH_REQUIRED: the screen navigates back to the login. */
     data object SessionExpired : FeedUiState
@@ -49,6 +50,8 @@ class FeedViewModel(
     private val eventTracker: EventTracker,
     private val sharedFilters: MutableStateFlow<FeedFilters>,
     private val deviceClock: () -> Instant = Instant::now,
+    /** BQ-01 load telemetry (Samuel). Optional so the existing tests keep their constructor. */
+    private val telemetry: FeedLoadTelemetry? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<FeedUiState>(FeedUiState.Loading)
@@ -76,6 +79,7 @@ class FeedViewModel(
 
     /** Retry with the current filters. */
     fun load() {
+        if (_state.value is FeedUiState.Loading) return
         viewModelScope.launch { fetch(sharedFilters.value) }
     }
 
@@ -98,17 +102,26 @@ class FeedViewModel(
         if (impressed.add(menu.id)) eventTracker.track(EventKind.FEED_IMPRESSION, menu, SCREEN)
     }
 
+    fun onFeedRendered(loadId: String?) {
+        if (loadId == null || telemetry == null) return
+        viewModelScope.launch { telemetry.rendered(loadId) }
+    }
+
     /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
     private suspend fun fetch(filters: FeedFilters) {
+        val attempt = telemetry?.start()
         _state.value = FeedUiState.Loading
         _recommendationIndex.value = 0 // a new load starts again at the backend's best option
         _state.value = try {
             val response = repository.feed(filters)
+            if (attempt != null) telemetry?.success(attempt)
             FeedUiState.Content(
                 menus = response.menus.filter { it.closedAt == null && it.isActive(response.serverNow) },
                 clockOffset = Duration.between(deviceClock(), response.serverNow),
+                loadId = attempt?.loadId,
             )
         } catch (e: ApiException) {
+            if (attempt != null) telemetry?.failure(attempt, e.code)
             when (e.code) {
                 ApiException.AUTH_REQUIRED -> FeedUiState.SessionExpired
                 ApiException.OFFLINE -> FeedUiState.Error(
@@ -126,7 +139,12 @@ class FeedViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                FeedViewModel(app.container.menuRepository, app.container.eventTracker, app.container.feedFilters)
+                FeedViewModel(
+                    app.container.menuRepository,
+                    app.container.eventTracker,
+                    app.container.feedFilters,
+                    telemetry = app.container.feedLoadTelemetry,
+                )
             }
         }
     }

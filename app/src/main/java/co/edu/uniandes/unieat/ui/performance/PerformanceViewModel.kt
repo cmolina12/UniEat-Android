@@ -10,6 +10,8 @@ import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +22,7 @@ sealed interface PerformanceUiState {
     data object Loading : PerformanceUiState
 
     /** Metrics computed by the backend for the selected period. */
-    data class Content(val summary: PerformanceSummary) : PerformanceUiState
+    data class Content(val summary: PerformanceSummary, val feedLoadReport: FeedLoadReport? = null) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
     data class Restricted(val message: String) : PerformanceUiState
@@ -37,6 +39,7 @@ sealed interface PerformanceUiState {
  */
 class PerformanceViewModel(
     private val repository: AnalyticsRepository,
+    private val feedLoadTelemetry: FeedLoadTelemetry? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
@@ -55,7 +58,7 @@ class PerformanceViewModel(
         _state.value = PerformanceUiState.Loading
         viewModelScope.launch {
             _state.value = try {
-                PerformanceUiState.Content(repository.performance(_days.value))
+                PerformanceUiState.Content(repository.performance(_days.value), feedLoadTelemetry?.report(7))
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
@@ -77,7 +80,7 @@ class PerformanceViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                PerformanceViewModel(app.container.analyticsRepository)
+                PerformanceViewModel(app.container.analyticsRepository, app.container.feedLoadTelemetry)
             }
         }
     }

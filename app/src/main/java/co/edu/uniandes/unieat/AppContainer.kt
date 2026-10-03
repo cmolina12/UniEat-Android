@@ -4,6 +4,9 @@ import android.content.Context
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
+import co.edu.uniandes.unieat.data.auth.SessionManager
+import co.edu.uniandes.unieat.data.auth.SessionStore
+import co.edu.uniandes.unieat.data.auth.SupabaseAuthRepository
 import co.edu.uniandes.unieat.data.analytics.EventQueue
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.EventUploader
@@ -12,14 +15,17 @@ import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
-import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.data.repository.RemoteMenuRepository
 import co.edu.uniandes.unieat.data.repository.RemoteReportRepository
 import co.edu.uniandes.unieat.data.repository.ReportRepository
+import co.edu.uniandes.unieat.data.repository.ProfileRepository
+import co.edu.uniandes.unieat.data.repository.RemoteProfileRepository
+import co.edu.uniandes.unieat.data.repository.FakeProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,12 +37,17 @@ class AppContainer(
     private val context: Context,
     val config: SupabaseConfig = SupabaseConfig.fromBuildConfig(),
 ) {
-    // Debug builds with a backend sign in with a test account (DevTokenProvider); otherwise every
-    // request fails with AUTH_REQUIRED. Replaced by the Supabase Auth session when Login is built.
-    private val tokenProvider: AccessTokenProvider =
-        DevDataSource.tokenProvider(config) ?: AccessTokenProvider { throw ApiException.authRequired() }
+    val authRepository by lazy { SupabaseAuthRepository(config) }
+    val sessionStore by lazy { SessionStore(context) }
+    val sessionManager by lazy { SessionManager(authRepository, sessionStore) }
+
+    // Demo mode still bypasses the remote API. Configured builds use the real persisted Supabase session.
+    private val tokenProvider: AccessTokenProvider by lazy { sessionManager }
 
     val apiClient: ApiClient by lazy { ApiClient(config, tokenProvider) }
+    val profileRepository: ProfileRepository by lazy {
+        if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
+    }
 
     // Automatic: debug builds without supabase.url in local.properties run on fake data;
     // with a backend configured they call api-v1. Release never has fake data.
@@ -48,6 +59,9 @@ class AppContainer(
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
 
     val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
+
+    /** BQ-01 technical telemetry persisted locally for the seven-day diagnostic. */
+    val feedLoadTelemetry by lazy { FeedLoadTelemetry(context) }
 
     /** Feed filters shared by "Hoy" and "Elige por mí": both ViewModels observe this same flow. */
     val feedFilters = MutableStateFlow(FeedFilters())

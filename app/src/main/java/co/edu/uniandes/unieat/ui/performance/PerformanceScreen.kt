@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.ui.feed.FeedStatusCard
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
@@ -103,7 +104,10 @@ private fun PerformanceContent(
                 title = "No pudimos cargar las métricas",
                 body = state.message,
             ) { SolidButton("Reintentar", onClick = onRetry, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
-            is PerformanceUiState.Content -> SummaryCards(state.summary)
+            is PerformanceUiState.Content -> {
+                SummaryCards(state.summary)
+                FeedLoadingBqCard(state.feedLoadReport)
+            }
         }
     }
 }
@@ -131,6 +135,39 @@ private fun SummaryCards(summary: PerformanceSummary) {
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+
+
+/** Samuel — BQ-01: seven-day technical diagnostic from persisted feed-load telemetry. */
+@Composable
+private fun FeedLoadingBqCard(report: FeedLoadReport?) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-01 · Rendimiento de carga del feed", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        if (report == null || (report.attempts == 0 && report.abandoned == 0)) {
+            Text("Aún no hay cargas registradas en los últimos 7 días.")
+            return@SurfaceCard
+        }
+        Text("${report.attempts} cargas completadas · agrupadas por conexión, dispositivo, Android y hora.")
+        if (report.abandoned > 0) {
+            Text(
+                "${report.abandoned} cargas abandonadas (el usuario salió antes de ver el feed); no cuentan como fallos.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        report.groups.take(5).forEach { group ->
+            val failure = (group.failureRate * 100).toInt()
+            val p95 = group.p95RequestToRenderMs?.let { "$it ms" } ?: "sin renders suficientes"
+            Text(
+                "${group.connectionType} · ${group.deviceModel} · ${group.osVersion} · ${group.hour}:00 — " +
+                    "fallos $failure% (${group.failures}/${group.attempts}), p95 $p95",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (report.groups.size > 5) {
+            Text("Se muestran los 5 grupos con mayor tasa de fallo/latencia.", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

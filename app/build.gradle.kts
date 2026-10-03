@@ -31,12 +31,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            // Test account for DevTokenProvider until the Login feature exists (debug builds only).
-            // Fictitious seed.sql credentials; override with dev.email / dev.password in local.properties.
-            buildConfigField("String", "DEV_EMAIL", "\"${localProperties.getProperty("dev.email", "estudiante1@unieat.test")}\"")
-            buildConfigField("String", "DEV_PASSWORD", "\"${localProperties.getProperty("dev.password", "UniEat-dev-2026")}\"")
-        }
+        debug { }
         release {
             isMinifyEnabled = false
         }
@@ -78,6 +73,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.play.services.location)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

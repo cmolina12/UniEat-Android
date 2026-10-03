@@ -38,9 +38,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.data.sensor.ShakeRefreshController
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.MenuDish
@@ -66,8 +68,20 @@ fun FeedScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()
-    val container = (LocalContext.current.applicationContext as UniEatApplication).container
+    val context = LocalContext.current
+    val container = (context.applicationContext as UniEatApplication).container
     var showFilters by rememberSaveable { mutableStateOf(false) }
+
+    // Samuel — sensor contribution: shake-to-refresh using the accelerometer.
+    LifecycleResumeEffect(viewModel) {
+        val shake = ShakeRefreshController(context, viewModel::load)
+        shake.start()
+        onPauseOrDispose { shake.stop() }
+    }
+
+    LaunchedEffect((state as? FeedUiState.Content)?.loadId) {
+        viewModel.onFeedRendered((state as? FeedUiState.Content)?.loadId)
+    }
 
     // Small auth PR: an expired session sends the student back to the login.
     LaunchedEffect(state) {

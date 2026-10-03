@@ -21,17 +21,7 @@ import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 // The Feed ("Hoy") and "Elige por mí" live in ui/feed; "Rendimiento" lives in ui/performance.
 
 @Composable
-fun LoginScreen(onSignedIn: () -> Unit) = Placeholder("Ingresar", "Inicio de sesión con Supabase Auth.") {
-    SolidButton("Entrar (demo)", onClick = onSignedIn)
-}
-
-@Composable
 fun PublishScreen() = Placeholder("Publicar", "Crear o editar el menú del día (POST/PUT /menus).")
-
-@Composable
-fun ProfileScreen(onSignOut: () -> Unit) = Placeholder("Mi perfil", "Datos de GET /me y preferencias.") {
-    SolidButton("Cerrar sesión", onClick = onSignOut, color = Palette.Yellow)
-}
 
 @Composable
 private fun Placeholder(title: String, description: String, actions: @Composable () -> Unit = {}) {
@@ -51,4 +41,4 @@ private fun Placeholder(title: String, description: String, actions: @Composable
 
 @Preview(showBackground = true, backgroundColor = 0xFFF5F0E6)
 @Composable
-private fun PlaceholderPreview() = UniEatTheme { LoginScreen(onSignedIn = {}) }
+private fun PlaceholderPreview() = UniEatTheme { PublishScreen() }
