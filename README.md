@@ -2,7 +2,7 @@
 
 UniEat is a Jetpack Compose app for finding the daily menus published by small restaurants near Universidad de los Andes. It is the Android client of the UniEat project. It shares the same Supabase API v1 and the same product decisions as the iOS app, so a menu published from one platform is visible on the other. The app can run as a local demo with seeded data or connect to the shared backend.
 
-This README covers the Sprint 2 deliverable items for the Android client. It lists the business questions with their type and rationale, the implemented functionalities and views with their owners, the analytics pipeline, and the architecture with its diagrams, patterns and tactics.
+This README covers the Sprint 2 deliverable items for the Android client. It lists the business questions with their type and rationale, the implemented functionalities and views with their owners, the analytics pipeline, and the architecture with its diagrams, patterns and tactics. The rubric mapping, architecture and design patterns, data pipeline and presentation walkthrough are documented in `docs/sprint2-sustentacion.md`.
 
 Team members on this client are Camilo Molina, Juan José Murillo and Samuel David Rozo.
 
