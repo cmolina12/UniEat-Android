@@ -14,9 +14,10 @@ import java.time.Instant
 @Composable
 fun rememberServerNow(offset: Duration): Instant {
     val now by produceState(Instant.now() + offset, offset) {
+        // produceState keeps the old value when the key changes: refresh right away, not a minute later.
         while (true) {
-            delay(60_000)
             value = Instant.now() + offset
+            delay(60_000)
         }
     }
     return now

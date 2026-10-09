@@ -9,9 +9,13 @@ import co.edu.uniandes.unieat.core.model.MenuDetailResponse
 import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.CachedFeed
+import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.SavedMenu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -45,6 +49,79 @@ class MenuDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals(MenuDetailUiState.Content(menu, Duration.ofSeconds(90)), vm.state.value)
+    }
+
+    @Test
+    fun offlineOpensTheSavedCopyFromTheFeed() = runTest(dispatcher) {
+        val savedAt = serverNow - Duration.ofMinutes(10)
+        val tracker = RecordingTracker()
+        val vm = MenuDetailViewModel(
+            "m", StubRepository { throw ApiException.offline() }, StubLocation(), tracker, StubReports(),
+            feedCache = OneMenuCache(SavedMenu(menu(), serverNow = savedAt + Duration.ofSeconds(90), savedAt = savedAt)),
+        ) { serverNow }
+        advanceUntilIdle()
+
+        assertEquals(
+            MenuDetailUiState.Content(menu(), Duration.ofSeconds(90), savedAt = savedAt),
+            vm.state.value,
+        )
+        assertEquals(listOf(EventKind.DETAIL_OPEN), tracker.events.map { it.kind })
+    }
+
+    @Test
+    fun offlineWithoutASavedCopyStaysAnError() = runTest(dispatcher) {
+        val vm = MenuDetailViewModel(
+            "m", StubRepository { throw ApiException.offline() }, StubLocation(), RecordingTracker(), StubReports(),
+            feedCache = OneMenuCache(null),
+        ) { serverNow }
+        advanceUntilIdle()
+
+        assertEquals(ApiException.OFFLINE, (vm.state.value as MenuDetailUiState.Error).code)
+    }
+
+    @Test
+    fun goingBackOnlineReplacesTheSavedCopy() = runTest(dispatcher) {
+        val connection = MutableStateFlow(false)
+        val fresh = menu().copy(title = "Menú actualizado")
+        val vm = MenuDetailViewModel(
+            "m",
+            StubRepository { if (connection.value) MenuDetailResponse(serverNow, serverNow, fresh) else throw ApiException.offline() },
+            StubLocation(), RecordingTracker(), StubReports(),
+            feedCache = OneMenuCache(SavedMenu(menu(), serverNow, serverNow)),
+            online = connection,
+        ) { serverNow }
+        advanceUntilIdle()
+        assertEquals(serverNow, (vm.state.value as MenuDetailUiState.Content).savedAt)
+
+        connection.value = true
+        advanceUntilIdle()
+
+        assertEquals(MenuDetailUiState.Content(fresh, Duration.ZERO), vm.state.value)
+    }
+
+    @Test
+    fun goingBackOnlineReloadsAnOfflineError() = runTest(dispatcher) {
+        val connection = MutableStateFlow(false)
+        val vm = MenuDetailViewModel(
+            "m",
+            StubRepository { if (connection.value) MenuDetailResponse(serverNow, serverNow, menu()) else throw ApiException.offline() },
+            StubLocation(), RecordingTracker(), StubReports(),
+            online = connection,
+        ) { serverNow }
+        advanceUntilIdle()
+        assertEquals(ApiException.OFFLINE, (vm.state.value as MenuDetailUiState.Error).code)
+
+        connection.value = true
+        advanceUntilIdle()
+
+        assertEquals(MenuDetailUiState.Content(menu(), Duration.ZERO), vm.state.value)
+    }
+
+    private class OneMenuCache(private val saved: SavedMenu?) : FeedCache {
+        override suspend fun save(entry: CachedFeed) = Unit
+        override suspend fun load(filters: FeedFilters): CachedFeed? = null
+        override suspend fun findMenu(id: String) = saved?.takeIf { it.menu.id == id }
+        override suspend fun clear() = Unit
     }
 
     @Test

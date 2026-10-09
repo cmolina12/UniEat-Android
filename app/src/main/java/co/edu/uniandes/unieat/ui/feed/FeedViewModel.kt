@@ -16,6 +16,7 @@ import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.CachedFeed
 import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.savedClockOffset
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,8 +158,9 @@ class FeedViewModel(
 
     /** The saved copy keeps the clock offset it had when it was saved, so validity still follows the server. */
     private fun savedCopy(saved: CachedFeed): FeedUiState.Content {
-        val offset = Duration.between(saved.savedAt, saved.response.serverNow)
-        val serverNow = deviceClock() + offset
+        val deviceNow = deviceClock()
+        val offset = savedClockOffset(saved.savedAt, saved.response.serverNow, deviceNow)
+        val serverNow = deviceNow + offset
         return FeedUiState.Content(
             menus = saved.response.menus.filter { it.closedAt == null && it.isActive(serverNow) },
             clockOffset = offset,

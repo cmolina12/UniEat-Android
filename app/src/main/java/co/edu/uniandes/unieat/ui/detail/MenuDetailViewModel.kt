@@ -23,7 +23,9 @@ import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.savedClockOffset
 import co.edu.uniandes.unieat.data.repository.ReportRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -48,7 +50,8 @@ import java.time.Instant
 sealed interface MenuDetailUiState {
     data object Loading : MenuDetailUiState
 
-    data class Content(val menu: DailyMenu, val clockOffset: Duration) : MenuDetailUiState {
+    /** [savedAt] is set when the device is offline and the menu comes from the last saved feed. */
+    data class Content(val menu: DailyMenu, val clockOffset: Duration, val savedAt: Instant? = null) : MenuDetailUiState {
         val location: LocationGuidance = locationGuidance(menu)
     }
 
@@ -110,6 +113,9 @@ class MenuDetailViewModel(
     private val reportRepository: ReportRepository,
     val isDemo: Boolean = false,
     val fixtures: List<DemoFixture> = emptyList(),
+    private val feedCache: FeedCache? = null,
+    /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
+    online: Flow<Boolean>? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -141,6 +147,16 @@ class MenuDetailViewModel(
 
     init {
         load()
+        if (online != null) viewModelScope.launch {
+            online.collect { isOnline ->
+                if (!isOnline) return@collect
+                when (val current = _state.value) {
+                    is MenuDetailUiState.Error -> if (current.code == ApiException.OFFLINE) load()
+                    is MenuDetailUiState.Content -> if (current.savedAt != null) refreshQuietly()
+                    else -> Unit
+                }
+            }
+        }
     }
 
     fun load() {
@@ -148,20 +164,30 @@ class MenuDetailViewModel(
         viewModelScope.launch {
             _state.value = try {
                 val response = repository.menu(menuId)
-                if (!openTracked) {
-                    openTracked = true
-                    eventTracker.track(EventKind.DETAIL_OPEN, response.menu, SCREEN)
-                }
+                trackOpen(response.menu)
                 MenuDetailUiState.Content(response.menu, Duration.between(deviceClock(), response.serverNow))
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
-                    ApiException.OFFLINE -> MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
+                    ApiException.OFFLINE -> feedCache?.findMenu(menuId)?.let { saved ->
+                        trackOpen(saved.menu)
+                        MenuDetailUiState.Content(
+                            saved.menu,
+                            clockOffset = savedClockOffset(saved.savedAt, saved.serverNow, deviceClock()),
+                            savedAt = saved.savedAt,
+                        )
+                    } ?: MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
                     else -> MenuDetailUiState.Error(e.error.message, e.code)
                 }
             }
         }
+    }
+
+    private fun trackOpen(menu: DailyMenu) {
+        if (openTracked) return
+        openTracked = true
+        eventTracker.track(EventKind.DETAIL_OPEN, menu, SCREEN)
     }
 
     fun onLocationPermissionChecked(permission: LocationPermission) = access.update {
@@ -301,6 +327,8 @@ class MenuDetailViewModel(
                         app.container.config.isLocal -> DevDataSource.seedFixtures
                         else -> emptyList()
                     },
+                    feedCache = app.container.feedCache,
+                    online = app.container.connectivity.online,
                 )
             }
         }

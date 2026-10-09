@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -22,8 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -51,6 +54,9 @@ private const val SAME_SPOT_METERS = 15.0
 
 private const val SHOW_ACCURACY_ABOVE_METERS = 25f
 
+/** The legend and credit sit on top of the map; with a huge system font they would hide the pins. */
+private const val MAX_OVERLAY_FONT_SCALE = 1.3f
+
 @Composable
 fun OsmMap(
     point: Coordinate,
@@ -68,17 +74,22 @@ fun OsmMap(
                 .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
         )
 
-        MapLegend(showUser = user != null, modifier = Modifier.align(Alignment.TopStart))
+        val density = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides Density(density.density, density.fontScale.coerceAtMost(MAX_OVERLAY_FONT_SCALE)),
+        ) {
+            MapLegend(showUser = user != null, modifier = Modifier.align(Alignment.TopStart))
 
-        Text(
-            "© OpenStreetMap contributors",
-            fontSize = 10.sp,
-            color = Palette.Ink,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .background(Color.White.copy(alpha = 0.85f))
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-        )
+            Text(
+                "© OpenStreetMap contributors",
+                fontSize = 10.sp,
+                color = Palette.Ink,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .background(Color.White.copy(alpha = 0.85f))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
     }
 }
 

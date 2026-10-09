@@ -288,6 +288,7 @@ class FeedViewModelTest {
         private val entries = mutableMapOf<FeedFilters, CachedFeed>()
         override suspend fun save(entry: CachedFeed) { entries[entry.filters] = entry }
         override suspend fun load(filters: FeedFilters) = entries[filters]
+        override suspend fun findMenu(id: String) = null
         override suspend fun clear() = entries.clear()
     }
 

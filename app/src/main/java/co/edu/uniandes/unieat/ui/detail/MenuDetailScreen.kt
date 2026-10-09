@@ -192,6 +192,9 @@ private fun MenuDetailContent(
                 CircularProgressIndicator(color = Palette.Ink)
             }
             is MenuDetailUiState.Content -> {
+                state.savedAt?.let {
+                    DemoNotice("Sin conexión · menú guardado a las ${SpanishPresentation.time(it)} · puede haber cambiado")
+                }
                 recommendation?.let { RecommendationCard(it) }
                 MenuBody(
                     state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
