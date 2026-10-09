@@ -4,6 +4,7 @@ import android.content.Context
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
+import co.edu.uniandes.unieat.data.auth.AuthState
 import co.edu.uniandes.unieat.data.auth.SessionManager
 import co.edu.uniandes.unieat.data.auth.SessionStore
 import co.edu.uniandes.unieat.data.auth.SupabaseAuthRepository
@@ -15,6 +16,7 @@ import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
+import co.edu.uniandes.unieat.data.network.ConnectivityMonitor
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
@@ -24,6 +26,8 @@ import co.edu.uniandes.unieat.data.telemetry.WorkManagerFeedLoadScheduler
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
+import co.edu.uniandes.unieat.data.repository.FeedCache
+import co.edu.uniandes.unieat.data.repository.FileFeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.data.repository.RemoteMenuRepository
 import co.edu.uniandes.unieat.data.repository.RemoteReportRepository
@@ -35,6 +39,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.launch
 import java.io.File
 
 class AppContainer(
@@ -60,6 +66,13 @@ class AppContainer(
     val menuRepository: MenuRepository by lazy { fakeMenuRepository ?: RemoteMenuRepository(apiClient) }
 
     val locationRepository: LocationRepository by lazy { FusedLocationRepository(context) }
+
+    val connectivity: ConnectivityMonitor by lazy { ConnectivityMonitor(context) }
+
+    /** Offline copy of the feed. Demo mode has no network, so it does not need one. */
+    val feedCache: FeedCache? by lazy {
+        if (usesFakeData) null else FileFeedCache(File(context.filesDir, "feed-cache"))
+    }
 
     // BQ-01: FeedLoadTelemetry (disk) → WorkManager → FeedLoadUploader → POST /telemetry/feed-loads.
     val feedLoadTelemetry: FeedLoadTelemetry by lazy {
@@ -96,5 +109,12 @@ class AppContainer(
 
     val eventTracker: EventTracker by lazy {
         QueuedEventTracker(eventQueue, flushScheduler, appScope, appVersion = BuildConfig.VERSION_NAME)
+    }
+
+    init {
+        // The saved feed belongs to the user who loaded it.
+        appScope.launch {
+            sessionManager.state.filterIsInstance<AuthState.SignedOut>().collect { feedCache?.clear() }
+        }
     }
 }

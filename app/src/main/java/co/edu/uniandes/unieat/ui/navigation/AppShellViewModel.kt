@@ -6,10 +6,12 @@ import co.edu.uniandes.unieat.core.model.MeResponse
 import co.edu.uniandes.unieat.data.auth.AuthState
 import co.edu.uniandes.unieat.data.auth.SessionManager
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -25,6 +27,8 @@ class AppShellViewModel(
     private val sessions: SessionManager,
     private val profiles: ProfileRepository,
     private val demo: Boolean,
+    /** Validated-connection changes; going back online retries a failed GET /me. */
+    online: Flow<Boolean> = emptyFlow(),
 ) : ViewModel() {
     private val _profileState = MutableStateFlow<AppProfileState>(AppProfileState.Loading)
     val profileState: StateFlow<AppProfileState> = _profileState.asStateFlow()
@@ -45,6 +49,9 @@ class AppShellViewModel(
                         else -> loadProfile()
                     }
                 }
+        }
+        viewModelScope.launch {
+            online.collect { if (it && _profileState.value is AppProfileState.Error) loadProfile() }
         }
     }
 

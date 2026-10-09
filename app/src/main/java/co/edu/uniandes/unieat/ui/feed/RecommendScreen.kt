@@ -79,6 +79,7 @@ fun RecommendScreen(
             ) { SolidButton("Reintentar", onClick = viewModel::load, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
             is FeedUiState.Content -> {
                 val content = state as FeedUiState.Content
+                content.savedAt?.let { DemoNotice(offlineCopyNotice(it)) }
                 // Strategy pattern: the active criterion picks among the backend's options
                 val serverNow = rememberServerNow(content.clockOffset)
                 val recommended = strategy.pick(content.menus, index, serverNow)

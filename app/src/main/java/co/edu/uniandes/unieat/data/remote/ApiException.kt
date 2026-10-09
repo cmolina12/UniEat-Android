@@ -35,7 +35,7 @@ class ApiException(
         const val UNCONFIGURED = "UNCONFIGURED"
 
         fun offline(cause: Throwable? = null) = ApiException(
-            ApiError(OFFLINE, "Sin conexión con el servidor. Se muestra la última copia guardada."),
+            ApiError(OFFLINE, "Sin conexión con el servidor. Revisa tu internet e inténtalo de nuevo."),
             cause = cause,
         )
 

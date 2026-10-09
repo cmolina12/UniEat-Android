@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -60,7 +61,12 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
     }
     val shell: AppShellViewModel = viewModel(
         factory = simpleFactory {
-            AppShellViewModel(container.sessionManager, container.profileRepository, container.usesFakeData)
+            AppShellViewModel(
+                container.sessionManager,
+                container.profileRepository,
+                container.usesFakeData,
+                online = container.connectivity.online,
+            )
         },
     )
     val profileState by shell.profileState.collectAsStateWithLifecycle()
@@ -88,7 +94,8 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             if (profileState is AppProfileState.Error && authState is AuthState.SignedIn) {
                 Surface {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        // Below the status bar: the system takes every touch drawn under it.
+                        modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("No se pudo cargar tu rol.", modifier = Modifier.weight(1f))
