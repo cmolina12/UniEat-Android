@@ -31,13 +31,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -74,6 +75,9 @@ sealed interface DistanceStatus {
     data class PermissionDenied(val permanently: Boolean) : DistanceStatus
     data object LocationOff : DistanceStatus
     data object Searching : DistanceStatus
+
+    /** Still listening, but no fix after [MenuDetailViewModel.SLOW_FIX_MILLIS] (indoors, weak GPS). */
+    data object SlowFix : DistanceStatus
     data object Unavailable : DistanceStatus
     data class Known(
         val proximity: Proximity,
@@ -253,23 +257,31 @@ class MenuDetailViewModel(
             !enabled -> flowOf(DistanceStatus.LocationOff)
             else -> {
                 val precise = access.permission == LocationPermission.PRECISE
-                locationRepository.locationUpdates(precise)
-                    .map<UserLocation, DistanceStatus> {
-                        DistanceStatus.Known(
-                            proximity(it.coordinate, it.accuracyMeters, pin),
-                            approximate = !precise,
-                            user = it.coordinate,
-                            accuracyMeters = it.accuracyMeters,
+                channelFlow<DistanceStatus> {
+                    send(DistanceStatus.Searching)
+                    val slow = launch {
+                        delay(SLOW_FIX_MILLIS)
+                        send(DistanceStatus.SlowFix)
+                    }
+                    locationRepository.locationUpdates(precise).collect {
+                        slow.cancel()
+                        send(
+                            DistanceStatus.Known(
+                                proximity(it.coordinate, it.accuracyMeters, pin),
+                                approximate = !precise,
+                                user = it.coordinate,
+                                accuracyMeters = it.accuracyMeters,
+                            ),
                         )
                     }
-                    .onStart { emit(DistanceStatus.Searching) }
-                    .catch { emit(DistanceStatus.Unavailable) }
+                }.catch { emit(DistanceStatus.Unavailable) }
             }
         }
     }
 
     companion object {
         private const val SCREEN = "detail"
+        internal const val SLOW_FIX_MILLIS = 20_000L
         internal const val OFFLINE_MESSAGE = "Sin conexión con el servidor. Revisa tu señal e inténtalo de nuevo."
 
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
@@ -283,7 +295,12 @@ class MenuDetailViewModel(
                     app.container.eventTracker,
                     app.container.reportRepository,
                     isDemo = demo,
-                    fixtures = if (demo) DevDataSource.fixtures else DevDataSource.seedFixtures,
+                    // The seed menus only exist in a local `supabase start`, never on the shared project.
+                    fixtures = when {
+                        demo -> DevDataSource.fixtures
+                        app.container.config.isLocal -> DevDataSource.seedFixtures
+                        else -> emptyList()
+                    },
                 )
             }
         }

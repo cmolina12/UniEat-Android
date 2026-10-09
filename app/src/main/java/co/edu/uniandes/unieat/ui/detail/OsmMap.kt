@@ -219,5 +219,8 @@ private fun configureOsmdroid(context: Context) {
     val base = File(context.cacheDir, "osmdroid")
     config.osmdroidBasePath = base
     config.osmdroidTileCache = File(base, "tiles")
+    // osmdroid keeps up to 600 MB of tiles by default; a few campus blocks need far less.
+    config.tileFileSystemCacheMaxBytes = 50L * 1024 * 1024
+    config.tileFileSystemCacheTrimBytes = 40L * 1024 * 1024
     config.userAgentValue = context.packageName
 }
