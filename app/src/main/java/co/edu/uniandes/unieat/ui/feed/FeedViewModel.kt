@@ -13,8 +13,12 @@ import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.CachedFeed
+import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.savedClockOffset
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,8 +35,14 @@ sealed interface FeedUiState {
     /**
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
+     * [savedAt] is set when the device is offline and the menus come from the last saved copy.
      */
-    data class Content(val menus: List<DailyMenu>, val clockOffset: Duration, val loadId: String? = null) : FeedUiState
+    data class Content(
+        val menus: List<DailyMenu>,
+        val clockOffset: Duration,
+        val loadId: String? = null,
+        val savedAt: Instant? = null,
+    ) : FeedUiState
 
     /** AUTH_REQUIRED: the screen navigates back to the login. */
     data object SessionExpired : FeedUiState
@@ -52,6 +62,9 @@ class FeedViewModel(
     private val deviceClock: () -> Instant = Instant::now,
     /** BQ-01 load telemetry (Samuel). Optional so the existing tests keep their constructor. */
     private val telemetry: FeedLoadTelemetry? = null,
+    private val cache: FeedCache? = null,
+    /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
+    online: Flow<Boolean>? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<FeedUiState>(FeedUiState.Loading)
@@ -75,6 +88,15 @@ class FeedViewModel(
         viewModelScope.launch {
             sharedFilters.collectLatest { fetch(it) }
         }
+        if (online != null) viewModelScope.launch {
+            online.collect { if (it && isShowingOfflineState()) load() }
+        }
+    }
+
+    private fun isShowingOfflineState() = when (val current = _state.value) {
+        is FeedUiState.Error -> current.code == ApiException.OFFLINE
+        is FeedUiState.Content -> current.savedAt != null
+        else -> false
     }
 
     /** Retry with the current filters. */
@@ -115,6 +137,7 @@ class FeedViewModel(
         _state.value = try {
             val response = repository.feed(filters)
             if (attempt != null) telemetry?.success(attempt)
+            cache?.save(CachedFeed(filters, response, savedAt = deviceClock()))
             FeedUiState.Content(
                 menus = response.menus.filter { it.closedAt == null && it.isActive(response.serverNow) },
                 clockOffset = Duration.between(deviceClock(), response.serverNow),
@@ -124,13 +147,25 @@ class FeedViewModel(
             if (attempt != null) telemetry?.failure(attempt, e.code)
             when (e.code) {
                 ApiException.AUTH_REQUIRED -> FeedUiState.SessionExpired
-                ApiException.OFFLINE -> FeedUiState.Error(
+                ApiException.OFFLINE -> cache?.load(filters)?.let(::savedCopy) ?: FeedUiState.Error(
                     "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
                     e.code,
                 )
                 else -> FeedUiState.Error(e.error.message, e.code)
             }
         }
+    }
+
+    /** The saved copy keeps the clock offset it had when it was saved, so validity still follows the server. */
+    private fun savedCopy(saved: CachedFeed): FeedUiState.Content {
+        val deviceNow = deviceClock()
+        val offset = savedClockOffset(saved.savedAt, saved.response.serverNow, deviceNow)
+        val serverNow = deviceNow + offset
+        return FeedUiState.Content(
+            menus = saved.response.menus.filter { it.closedAt == null && it.isActive(serverNow) },
+            clockOffset = offset,
+            savedAt = saved.savedAt,
+        )
     }
 
     companion object {
@@ -144,6 +179,8 @@ class FeedViewModel(
                     app.container.eventTracker,
                     app.container.feedFilters,
                     telemetry = app.container.feedLoadTelemetry,
+                    cache = app.container.feedCache,
+                    online = app.container.connectivity.online,
                 )
             }
         }

@@ -8,6 +8,7 @@ import co.edu.uniandes.unieat.data.auth.SessionPersistence
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
 import co.edu.uniandes.unieat.test.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -48,6 +49,20 @@ class AppShellViewModelTest {
         testScheduler.advanceUntilIdle()
         assertTrue(vm.profileState.value is AppProfileState.Content)
         assertEquals(1, repo.calls)
+    }
+
+    @Test fun `going back online retries a failed profile`() = runTest(main.dispatcher) {
+        val store = ShellStore(Session("a", "r", Instant.parse("2026-10-02T13:00:00Z"), "u"))
+        val sessions = SessionManager(ShellAuth(), store, { Instant.parse("2026-10-02T12:00:00Z") }, this)
+        val online = MutableStateFlow(false)
+        val vm = AppShellViewModel(sessions, ShellProfiles(1), false, online)
+        testScheduler.advanceUntilIdle()
+        assertTrue(vm.profileState.value is AppProfileState.Error)
+
+        online.value = true
+        testScheduler.advanceUntilIdle()
+
+        assertEquals("restaurant", (vm.profileState.value as AppProfileState.Content).profile.role)
     }
 
     @Test fun `demo profile remains available while signed out`() = runTest(main.dispatcher) {

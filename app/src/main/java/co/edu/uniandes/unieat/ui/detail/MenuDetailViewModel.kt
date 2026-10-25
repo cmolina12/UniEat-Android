@@ -23,7 +23,9 @@ import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.savedClockOffset
 import co.edu.uniandes.unieat.data.repository.ReportRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -31,13 +33,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -47,7 +50,8 @@ import java.time.Instant
 sealed interface MenuDetailUiState {
     data object Loading : MenuDetailUiState
 
-    data class Content(val menu: DailyMenu, val clockOffset: Duration) : MenuDetailUiState {
+    /** [savedAt] is set when the device is offline and the menu comes from the last saved feed. */
+    data class Content(val menu: DailyMenu, val clockOffset: Duration, val savedAt: Instant? = null) : MenuDetailUiState {
         val location: LocationGuidance = locationGuidance(menu)
     }
 
@@ -74,6 +78,9 @@ sealed interface DistanceStatus {
     data class PermissionDenied(val permanently: Boolean) : DistanceStatus
     data object LocationOff : DistanceStatus
     data object Searching : DistanceStatus
+
+    /** Still listening, but no fix after [MenuDetailViewModel.SLOW_FIX_MILLIS] (indoors, weak GPS). */
+    data object SlowFix : DistanceStatus
     data object Unavailable : DistanceStatus
     data class Known(
         val proximity: Proximity,
@@ -106,6 +113,9 @@ class MenuDetailViewModel(
     private val reportRepository: ReportRepository,
     val isDemo: Boolean = false,
     val fixtures: List<DemoFixture> = emptyList(),
+    private val feedCache: FeedCache? = null,
+    /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
+    online: Flow<Boolean>? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -137,6 +147,16 @@ class MenuDetailViewModel(
 
     init {
         load()
+        if (online != null) viewModelScope.launch {
+            online.collect { isOnline ->
+                if (!isOnline) return@collect
+                when (val current = _state.value) {
+                    is MenuDetailUiState.Error -> if (current.code == ApiException.OFFLINE) load()
+                    is MenuDetailUiState.Content -> if (current.savedAt != null) refreshQuietly()
+                    else -> Unit
+                }
+            }
+        }
     }
 
     fun load() {
@@ -144,20 +164,30 @@ class MenuDetailViewModel(
         viewModelScope.launch {
             _state.value = try {
                 val response = repository.menu(menuId)
-                if (!openTracked) {
-                    openTracked = true
-                    eventTracker.track(EventKind.DETAIL_OPEN, response.menu, SCREEN)
-                }
+                trackOpen(response.menu)
                 MenuDetailUiState.Content(response.menu, Duration.between(deviceClock(), response.serverNow))
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
-                    ApiException.OFFLINE -> MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
+                    ApiException.OFFLINE -> feedCache?.findMenu(menuId)?.let { saved ->
+                        trackOpen(saved.menu)
+                        MenuDetailUiState.Content(
+                            saved.menu,
+                            clockOffset = savedClockOffset(saved.savedAt, saved.serverNow, deviceClock()),
+                            savedAt = saved.savedAt,
+                        )
+                    } ?: MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
                     else -> MenuDetailUiState.Error(e.error.message, e.code)
                 }
             }
         }
+    }
+
+    private fun trackOpen(menu: DailyMenu) {
+        if (openTracked) return
+        openTracked = true
+        eventTracker.track(EventKind.DETAIL_OPEN, menu, SCREEN)
     }
 
     fun onLocationPermissionChecked(permission: LocationPermission) = access.update {
@@ -253,23 +283,31 @@ class MenuDetailViewModel(
             !enabled -> flowOf(DistanceStatus.LocationOff)
             else -> {
                 val precise = access.permission == LocationPermission.PRECISE
-                locationRepository.locationUpdates(precise)
-                    .map<UserLocation, DistanceStatus> {
-                        DistanceStatus.Known(
-                            proximity(it.coordinate, it.accuracyMeters, pin),
-                            approximate = !precise,
-                            user = it.coordinate,
-                            accuracyMeters = it.accuracyMeters,
+                channelFlow<DistanceStatus> {
+                    send(DistanceStatus.Searching)
+                    val slow = launch {
+                        delay(SLOW_FIX_MILLIS)
+                        send(DistanceStatus.SlowFix)
+                    }
+                    locationRepository.locationUpdates(precise).collect {
+                        slow.cancel()
+                        send(
+                            DistanceStatus.Known(
+                                proximity(it.coordinate, it.accuracyMeters, pin),
+                                approximate = !precise,
+                                user = it.coordinate,
+                                accuracyMeters = it.accuracyMeters,
+                            ),
                         )
                     }
-                    .onStart { emit(DistanceStatus.Searching) }
-                    .catch { emit(DistanceStatus.Unavailable) }
+                }.catch { emit(DistanceStatus.Unavailable) }
             }
         }
     }
 
     companion object {
         private const val SCREEN = "detail"
+        internal const val SLOW_FIX_MILLIS = 20_000L
         internal const val OFFLINE_MESSAGE = "Sin conexión con el servidor. Revisa tu señal e inténtalo de nuevo."
 
         fun factory(menuId: String): ViewModelProvider.Factory = viewModelFactory {
@@ -283,7 +321,14 @@ class MenuDetailViewModel(
                     app.container.eventTracker,
                     app.container.reportRepository,
                     isDemo = demo,
-                    fixtures = if (demo) DevDataSource.fixtures else DevDataSource.seedFixtures,
+                    // The seed menus only exist in a local `supabase start`, never on the shared project.
+                    fixtures = when {
+                        demo -> DevDataSource.fixtures
+                        app.container.config.isLocal -> DevDataSource.seedFixtures
+                        else -> emptyList()
+                    },
+                    feedCache = app.container.feedCache,
+                    online = app.container.connectivity.online,
                 )
             }
         }

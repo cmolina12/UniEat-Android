@@ -9,8 +9,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -91,7 +93,7 @@ class MenuDetailDistanceTest {
         assertEquals(DistanceStatus.LocationOff, vm.distance.value)
 
         location.enabled.value = true
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(DistanceStatus.Searching, vm.distance.value)
 
         location.fixes.emit(UserLocation(pin, 5f))
@@ -108,7 +110,7 @@ class MenuDetailDistanceTest {
         val location = StubLocation()
         val vm = viewModel(location)
         vm.onLocationPermissionChecked(LocationPermission.PRECISE)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(DistanceStatus.Searching, vm.distance.value)
         assertEquals(true, location.lastPrecise)
 
@@ -136,6 +138,22 @@ class MenuDetailDistanceTest {
         assertTrue(known.approximate)
         assertFalse(known.proximity.arrived)
         assertEquals(false, location.lastPrecise)
+    }
+
+    @Test
+    fun noFixForAWhileSaysSoButKeepsListening() = runTest(dispatcher) {
+        val location = StubLocation()
+        val vm = viewModel(location)
+        vm.onLocationPermissionChecked(LocationPermission.PRECISE)
+        runCurrent()
+        assertEquals(DistanceStatus.Searching, vm.distance.value)
+
+        advanceTimeBy(MenuDetailViewModel.SLOW_FIX_MILLIS + 1)
+        assertEquals(DistanceStatus.SlowFix, vm.distance.value)
+
+        location.fixes.emit(UserLocation(pin, 5f))
+        advanceUntilIdle()
+        assertTrue(vm.distance.value is DistanceStatus.Known)
     }
 
     @Test

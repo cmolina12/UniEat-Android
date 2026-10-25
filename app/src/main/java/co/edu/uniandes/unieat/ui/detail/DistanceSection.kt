@@ -46,6 +46,9 @@ data class LocationActions(
     val onOpenMaps: (source: String) -> Unit,
 )
 
+/** Beyond this the walking estimate is meaningless: the user is not around campus. */
+private const val FAR_FROM_CAMPUS_METERS = 5_000.0
+
 @Composable
 fun DistanceSection(status: DistanceStatus, actions: LocationActions) {
     val context = LocalContext.current
@@ -89,14 +92,23 @@ fun DistanceSection(status: DistanceStatus, actions: LocationActions) {
             Text("Buscando tu ubicación…", fontSize = 13.sp)
         }
 
+        DistanceStatus.SlowFix -> ContextNote(
+            "Todavía no encontramos tu ubicación. Bajo techo puede tardar; la distancia aparece apenas haya señal.",
+        )
+
         DistanceStatus.Unavailable -> ContextNote("No pudimos obtener tu ubicación. La distancia no está disponible por ahora.")
 
         is DistanceStatus.Known -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val far = status.proximity.distanceMeters > FAR_FROM_CAMPUS_METERS
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Filled.Place, contentDescription = null, tint = Palette.Ink, modifier = Modifier.size(16.dp))
                 Text(
-                    "A ${SpanishPresentation.distance(status.proximity.distanceMeters)} en línea recta · " +
-                        "~${status.proximity.walkingMinutes} min caminando",
+                    if (far) {
+                        "Estás a más de ${SpanishPresentation.distance(FAR_FROM_CAMPUS_METERS)} del local"
+                    } else {
+                        "A ${SpanishPresentation.distance(status.proximity.distanceMeters)} en línea recta · " +
+                            "~${status.proximity.walkingMinutes} min caminando"
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                 )

@@ -8,6 +8,8 @@ import co.edu.uniandes.unieat.core.model.MenuBody
 import co.edu.uniandes.unieat.core.model.MenuDetailResponse
 import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.CachedFeed
+import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.ui.detail.RecordingTracker
 import kotlinx.coroutines.Dispatchers
@@ -227,6 +229,67 @@ class FeedViewModelTest {
             ),
             tracker.events,
         )
+    }
+
+    @Test
+    fun offlineShowsTheLastSavedCopyOfTheSameFilters() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        var online = true
+        val menus = listOf(menu("a"), menu("b"))
+        val vm = FeedViewModel(
+            StubRepository { if (online) feedResponse(menus) else throw ApiException.offline() },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, cache = cache,
+        )
+        advanceUntilIdle()
+        assertNull((vm.state.value as FeedUiState.Content).savedAt)
+
+        online = false
+        vm.load()
+        advanceUntilIdle()
+
+        val saved = vm.state.value as FeedUiState.Content
+        assertEquals(menus, saved.menus)
+        assertEquals(serverNow, saved.savedAt)
+    }
+
+    @Test
+    fun savedCopyHidesMenusThatExpiredSinceItWasSaved() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        cache.save(CachedFeed(FeedFilters(), feedResponse(listOf(menu("a"))), savedAt = serverNow))
+        // Two hours later the one-hour menu is no longer valid.
+        val vm = FeedViewModel(
+            StubRepository { throw ApiException.offline() },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow + Duration.ofHours(2) }, cache = cache,
+        )
+        advanceUntilIdle()
+
+        assertEquals(emptyList<DailyMenu>(), (vm.state.value as FeedUiState.Content).menus)
+    }
+
+    @Test
+    fun goingBackOnlineReloadsAnOfflineError() = runTest(dispatcher) {
+        val connection = MutableStateFlow(false)
+        var calls = 0
+        val vm = FeedViewModel(
+            StubRepository { calls++; if (connection.value) feedResponse(listOf(menu("a"))) else throw ApiException.offline() },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, online = connection,
+        )
+        advanceUntilIdle()
+        assertEquals(ApiException.OFFLINE, (vm.state.value as FeedUiState.Error).code)
+
+        connection.value = true
+        advanceUntilIdle()
+
+        assertEquals(2, calls)
+        assertEquals(listOf(menu("a")), (vm.state.value as FeedUiState.Content).menus)
+    }
+
+    private class MemoryCache : FeedCache {
+        private val entries = mutableMapOf<FeedFilters, CachedFeed>()
+        override suspend fun save(entry: CachedFeed) { entries[entry.filters] = entry }
+        override suspend fun load(filters: FeedFilters) = entries[filters]
+        override suspend fun findMenu(id: String) = null
+        override suspend fun clear() = entries.clear()
     }
 
     private fun feedResponse(menus: List<DailyMenu>) =
