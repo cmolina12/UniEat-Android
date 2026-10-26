@@ -38,6 +38,17 @@ class ProfileViewModel(
         }
     }
 
+    /** Reloads without going through Loading, so the screen does not blink (after "Actualizar estado"). */
+    fun refresh() {
+        viewModelScope.launch {
+            try {
+                _state.value = ProfileState.Content(repository.me())
+            } catch (_: Exception) {
+                // The current profile stays; the establishments section shows its own message.
+            }
+        }
+    }
+
     fun signOut(onDone: () -> Unit) {
         viewModelScope.launch {
             sessions.signOut()

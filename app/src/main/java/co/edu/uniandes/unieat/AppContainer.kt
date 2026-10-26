@@ -35,6 +35,14 @@ import co.edu.uniandes.unieat.data.repository.ReportRepository
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
 import co.edu.uniandes.unieat.data.repository.RemoteProfileRepository
 import co.edu.uniandes.unieat.data.repository.FakeProfileRepository
+import co.edu.uniandes.unieat.data.repository.EstablishmentRepository
+import co.edu.uniandes.unieat.data.repository.AdminRepository
+import co.edu.uniandes.unieat.data.repository.FakeAdminRepository
+import co.edu.uniandes.unieat.data.repository.RemoteAdminRepository
+import co.edu.uniandes.unieat.data.location.AddressGeocoder
+import co.edu.uniandes.unieat.data.location.AndroidAddressGeocoder
+import co.edu.uniandes.unieat.data.repository.FakeEstablishmentRepository
+import co.edu.uniandes.unieat.data.repository.RemoteEstablishmentRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,6 +66,16 @@ class AppContainer(
     val profileRepository: ProfileRepository by lazy {
         if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
     }
+
+    val establishmentRepository: EstablishmentRepository by lazy {
+        if (usesFakeData) FakeEstablishmentRepository() else RemoteEstablishmentRepository(apiClient)
+    }
+
+    val adminRepository: AdminRepository by lazy {
+        if (usesFakeData) FakeAdminRepository() else RemoteAdminRepository(apiClient)
+    }
+
+    val addressGeocoder: AddressGeocoder by lazy { AndroidAddressGeocoder(context) }
 
     private val fakeMenuRepository: MenuRepository? = if (!config.isConfigured) DevDataSource.menuRepository() else null
 

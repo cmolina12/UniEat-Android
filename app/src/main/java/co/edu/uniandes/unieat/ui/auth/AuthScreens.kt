@@ -30,11 +30,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import co.edu.uniandes.unieat.core.model.MeResponse
 import co.edu.uniandes.unieat.data.auth.SupabaseAuthRepository
+import co.edu.uniandes.unieat.ui.profile.roleName
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
+import co.edu.uniandes.unieat.ui.theme.Sticker
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 
 @Composable
@@ -158,10 +161,12 @@ private const val NAME_MAX = 80
 fun ProfileScreen(
     vm: ProfileViewModel,
     onSignedOut: () -> Unit,
+    /** What each role manages here: requests for admins, establishments for everyone else (as on iOS). */
+    roleSections: @Composable (MeResponse) -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     Column(
-        Modifier.fillMaxSize().padding(16.dp),
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         BrandHeader("Mi perfil")
@@ -171,14 +176,21 @@ fun ProfileScreen(
                 Text(current.message)
                 TextButton(onClick = vm::load) { Text("Reintentar") }
             }
-            is ProfileState.Content -> SurfaceCard {
-                Text(current.me.displayName, style = MaterialTheme.typography.headlineSmall)
-                Text("Rol: ${current.me.role}")
-                current.me.establishments.forEach {
-                    Text("${it.establishmentName} · ${it.memberRole}")
+            is ProfileState.Content -> {
+                SurfaceCard(Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(current.me.displayName, style = MaterialTheme.typography.headlineSmall)
+                        Sticker(roleName(current.me.role), color = Palette.Green)
+                        Text(
+                            "Las preferencias de presupuesto, dieta, tiempo y zona se conservan al volver a la lista de menús.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+                roleSections(current.me)
             }
         }
-        SolidButton("Cerrar sesión", onClick = { vm.signOut(onSignedOut) })
+        SolidButton("Cerrar sesión", onClick = { vm.signOut(onSignedOut) }, color = Palette.Yellow)
     }
 }

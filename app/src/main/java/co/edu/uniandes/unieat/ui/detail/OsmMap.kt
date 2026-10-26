@@ -16,7 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +38,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.edu.uniandes.unieat.core.decision.Coordinate
 import co.edu.uniandes.unieat.ui.theme.Palette
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -64,15 +68,19 @@ fun OsmMap(
     modifier: Modifier = Modifier,
     user: Coordinate? = null,
     userAccuracyMeters: Float? = null,
+    /** When set, a tap on the map reports where (used to move a pin); otherwise the map ignores touches. */
+    onTap: ((Coordinate) -> Unit)? = null,
 ) {
     Box(modifier.background(Palette.Cream)) {
-        if (!LocalInspectionMode.current) MapViewHost(point, title, user, userAccuracyMeters)
+        if (!LocalInspectionMode.current) MapViewHost(point, title, user, userAccuracyMeters, onTap)
 
-        Box(
-            Modifier
-                .matchParentSize()
-                .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
-        )
+        if (onTap == null) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+            )
+        }
 
         val density = LocalDensity.current
         CompositionLocalProvider(
@@ -130,8 +138,26 @@ private class MapHolder(
 )
 
 @Composable
-private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, userAccuracyMeters: Float?) {
+private fun MapViewHost(
+    point: Coordinate,
+    title: String,
+    user: Coordinate?,
+    userAccuracyMeters: Float?,
+    onTap: ((Coordinate) -> Unit)?,
+) {
     val context = LocalContext.current
+    val currentOnTap by rememberUpdatedState(onTap)
+    val taps = remember {
+        MapEventsOverlay(object : MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                val handler = currentOnTap ?: return false
+                handler(Coordinate(p.latitude, p.longitude))
+                return true
+            }
+
+            override fun longPressHelper(p: GeoPoint): Boolean = false
+        })
+    }
     val holder = remember {
         configureOsmdroid(context)
         val map = MapView(context).apply {
@@ -185,6 +211,7 @@ private fun MapViewHost(point: Coordinate, title: String, user: Coordinate?, use
         holder.restaurant.position = pin
         holder.restaurant.title = title
         map.overlays.clear()
+        if (onTap != null) map.overlays += taps
         if (me != null && userAccuracyMeters != null && userAccuracyMeters > SHOW_ACCURACY_ABOVE_METERS) {
             holder.accuracy.points = Polygon.pointsAsCircle(me, userAccuracyMeters.toDouble())
             map.overlays += holder.accuracy

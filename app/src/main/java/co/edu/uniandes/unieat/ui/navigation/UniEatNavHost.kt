@@ -45,7 +45,13 @@ import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
-import co.edu.uniandes.unieat.ui.screens.PublishScreen
+import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
+import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
+import co.edu.uniandes.unieat.ui.profile.AdminViewModel
+import co.edu.uniandes.unieat.ui.profile.EstablishmentsSection
+import co.edu.uniandes.unieat.ui.profile.EstablishmentsViewModel
+import co.edu.uniandes.unieat.ui.publish.PublishScreen
+import co.edu.uniandes.unieat.ui.publish.PublishViewModel
 import co.edu.uniandes.unieat.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -136,7 +142,12 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSessionExpired = expireSession,
                 )
             }
-            composable<Publish> { PublishScreen() }
+            composable<Publish> {
+                val vm: PublishViewModel = viewModel(
+                    factory = simpleFactory { PublishViewModel(container.menuRepository, container.establishmentRepository) },
+                )
+                PublishScreen(vm = vm, onSessionExpired = expireSession)
+            }
             composable<Performance> {
                 PerformanceScreen(
                     role = role,
@@ -146,9 +157,34 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             }
             composable<Profile> {
                 val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(container.profileRepository, container.sessionManager) })
-                ProfileScreen(vm = vm, onSignedOut = {
-                    navController.navigate(Login) { popUpTo(0) { inclusive = true } }
-                })
+                ProfileScreen(
+                    vm = vm,
+                    onSignedOut = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    roleSections = { me ->
+                        if (me.role == "admin") {
+                            val admin: AdminViewModel = viewModel(factory = simpleFactory { AdminViewModel(container.adminRepository) })
+                            AdminApprovalsSection(admin)
+                            AdminRolesSection(admin, currentUserId = me.id)
+                        } else {
+                            val establishments: EstablishmentsViewModel = viewModel(
+                                factory = simpleFactory {
+                                    EstablishmentsViewModel(
+                                        container.profileRepository,
+                                        container.establishmentRepository,
+                                        container.locationRepository,
+                                        container.addressGeocoder,
+                                        // An approval can turn the account into a restaurant: tabs and role refresh.
+                                        onAccountChanged = {
+                                            shell.retryProfile()
+                                            vm.refresh()
+                                        },
+                                    )
+                                },
+                            )
+                            EstablishmentsSection(establishments)
+                        }
+                    },
+                )
             }
         }
     }
@@ -182,8 +218,12 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
     override fun <T : ViewModel> create(modelClass: Class<T>): T = builder() as T
 }
 
-/** Context-aware UX: publishing is restaurant-only; performance is restaurant/admin. Backend authorization remains authoritative. */
+/**
+ * Context-aware UX, same tabs as iOS: a restaurant gets "Publicar" in place of "Elige por mí";
+ * performance is restaurant/admin. Backend authorization remains authoritative.
+ */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
+    Tab.RECOMMEND -> demo || role != "restaurant"
     Tab.PUBLISH -> demo || role == "restaurant"
     Tab.PERFORMANCE -> demo || role == "restaurant" || role == "admin"
     else -> true

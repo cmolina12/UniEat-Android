@@ -86,6 +86,66 @@ data class EstablishmentMembership(
     @Serializable(InstantSerializer::class) val approvedAt: Instant? = null,
 )
 
+/** One establishment of GET /establishments/mine; only approved ones can publish. */
+@Serializable
+data class OwnEstablishment(
+    val id: String,
+    val name: String,
+    val area: String,
+    val address: String = "",
+    val entranceDescription: String = "",
+    val paymentMethods: List<String> = emptyList(),
+    val approved: Boolean = false,
+)
+
+@Serializable
+data class EstablishmentsResponse(val establishments: List<OwnEstablishment>)
+
+/** POST /establishments: asks to manage an establishment; an admin approves it before publishing. */
+@Serializable
+data class EstablishmentRequestBody(
+    val name: String,
+    val area: String,
+    val address: String,
+    val entranceDescription: String,
+    val paymentMethods: List<String>,
+    val photoUrl: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
+@Serializable
+data class EstablishmentRequestResponse(val message: String = "")
+
+/** One establishment request waiting for an admin (GET /admin/memberships?status=pending). */
+@Serializable
+data class PendingMembership(
+    val establishmentId: String,
+    val establishmentName: String = "",
+    val area: String = "",
+    val userId: String,
+    val displayName: String = "",
+)
+
+@Serializable
+data class PendingMembershipsResponse(val memberships: List<PendingMembership>)
+
+@Serializable
+data class ApprovalBody(val establishmentId: String, val userId: String)
+
+@Serializable
+data class AdminUser(val id: String, val displayName: String, val role: String)
+
+@Serializable
+data class AdminUsersResponse(val users: List<AdminUser>)
+
+/** Only admin or student: the restaurant role comes from an approved establishment. */
+@Serializable
+data class AdminRoleBody(val role: String)
+
+@Serializable
+data class AdminRoleResponse(val id: String, val role: String)
+
 @Serializable
 data class ReportBody(
     val publicationId: String,

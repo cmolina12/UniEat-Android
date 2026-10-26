@@ -24,6 +24,10 @@ object SpanishPresentation {
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
             .withLocale(locale).withZone(ZoneId.systemDefault()).format(instant)
 
+    fun date(instant: Instant): String =
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+            .withLocale(locale).withZone(ZoneId.systemDefault()).format(instant)
+
     fun time(instant: Instant): String =
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
             .withLocale(locale).withZone(ZoneId.systemDefault()).format(instant)
