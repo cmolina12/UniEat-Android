@@ -32,6 +32,7 @@ class SessionManagerTest {
         val repo = object : AuthRepository {
             override suspend fun signIn(email: String, password: String) = error("unused")
             override suspend fun refresh(refreshToken: String) = error("unused")
+            override suspend fun signUp(email: String, password: String, displayName: String): Session? = error("unused")
             override suspend fun signOut(accessToken: String) { throw ApiException.offline() }
         }
         val manager = SessionManager(repo, store, { now }, this)
@@ -47,6 +48,7 @@ class SessionManagerTest {
         val repo = object : AuthRepository {
             override suspend fun signIn(email: String, password: String) = error("unused")
             override suspend fun refresh(refreshToken: String): Session { throw ApiException.unexpected(500) }
+            override suspend fun signUp(email: String, password: String, displayName: String): Session? = error("unused")
             override suspend fun signOut(accessToken: String) = Unit
         }
         val manager = SessionManager(repo, store, { now }, this)
@@ -59,4 +61,4 @@ class SessionManagerTest {
 
 }
 private class MemoryStore(var value:Session?):SessionPersistence{ override suspend fun save(session:Session){value=session}; override suspend fun load()=value; override suspend fun clear(){value=null} }
-private class FakeAuth(private val now:Instant,private val fail:Boolean=false):AuthRepository{ var refreshes=0; override suspend fun signIn(email:String,password:String)=Session("a","r",now.plusSeconds(600),"u"); override suspend fun refresh(refreshToken:String):Session{refreshes++; if(fail) throw ApiException.authRequired(); return Session("new","r2",now.plusSeconds(600),"u")}; override suspend fun signOut(accessToken:String)=Unit }
+private class FakeAuth(private val now:Instant,private val fail:Boolean=false):AuthRepository{ var refreshes=0; override suspend fun signIn(email:String,password:String)=Session("a","r",now.plusSeconds(600),"u"); override suspend fun refresh(refreshToken:String):Session{refreshes++; if(fail) throw ApiException.authRequired(); return Session("new","r2",now.plusSeconds(600),"u")}; override suspend fun signUp(email:String,password:String,displayName:String):Session?=error("unused"); override suspend fun signOut(accessToken:String)=Unit }

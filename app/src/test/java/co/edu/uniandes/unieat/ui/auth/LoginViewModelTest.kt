@@ -43,19 +43,58 @@ class LoginViewModelTest {
         assertTrue(vm.state.value is LoginState.Success)
     }
 
+    @Test fun `sign up validates name, email and password length before calling auth`() = runTest(main.dispatcher) {
+        val auth = LoginAuth()
+        val vm = LoginViewModel(manager(auth, this))
+        vm.signUp(" ", "a@b.co", "secret")
+        assertTrue(vm.state.value is LoginState.Error)
+        vm.signUp("Ana", "bad", "secret")
+        assertTrue(vm.state.value is LoginState.Error)
+        vm.signUp("Ana", "a@b.co", "12345")
+        assertTrue(vm.state.value is LoginState.Error)
+        assertEquals(0, auth.signUps)
+    }
+
+    @Test fun `sign up with a session signs in`() = runTest(main.dispatcher) {
+        val auth = LoginAuth()
+        val vm = LoginViewModel(manager(auth, this))
+        vm.signUp("Ana", "a@b.co", "secret")
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, auth.signUps)
+        assertTrue(vm.state.value is LoginState.Success)
+    }
+
+    @Test fun `sign up that needs email confirmation asks to check the inbox`() = runTest(main.dispatcher) {
+        val auth = LoginAuth(confirmEmail = true)
+        val vm = LoginViewModel(manager(auth, this))
+        vm.signUp("Ana", "a@b.co", "secret")
+        testScheduler.advanceUntilIdle()
+        assertEquals(LoginState.ConfirmEmail, vm.state.value)
+        vm.resetMessage()
+        assertEquals(LoginState.Idle, vm.state.value)
+    }
+
     private fun manager(auth: AuthRepository, scope: kotlinx.coroutines.CoroutineScope) = SessionManager(
         auth, EmptyStore(), { Instant.parse("2026-10-02T12:00:00Z") }, scope,
     )
 }
 
-private class LoginAuth(private val gate: CompletableDeferred<Unit>? = null) : AuthRepository {
+private class LoginAuth(
+    private val gate: CompletableDeferred<Unit>? = null,
+    private val confirmEmail: Boolean = false,
+) : AuthRepository {
     var signIns = 0
+    var signUps = 0
     override suspend fun signIn(email: String, password: String): Session {
         signIns++
         gate?.await()
         return Session("a", "r", Instant.parse("2026-10-02T13:00:00Z"), "u")
     }
     override suspend fun refresh(refreshToken: String) = error("unused")
+    override suspend fun signUp(email: String, password: String, displayName: String): Session? {
+        signUps++
+        return if (confirmEmail) null else Session("a", "r", Instant.parse("2026-10-02T13:00:00Z"), "u")
+    }
     override suspend fun signOut(accessToken: String) = Unit
 }
 
