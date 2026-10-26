@@ -22,11 +22,16 @@ object FakeBackend {
 
     @Synchronized
     fun menus(now: Instant): List<DailyMenu> = SeedMenus.all(now).map { menu ->
+        menu.copy(pendingReports = reports(menu, now).count { it.status == "pending" })
+    }
+
+    /** Public reports of the menu's current version: seeded ones plus those submitted in this session. */
+    @Synchronized
+    fun reports(menu: DailyMenu, now: Instant): List<MenuReport> {
         val submitted = reports
             .filter { it.publicationId == menu.id && it.version == menu.version && it.status != "observation" }
             .map { MenuReport(it.id, it.kind, it.status, it.createdAt) }
-        val all = (submitted + menu.reports).sortedByDescending { it.createdAt }
-        menu.copy(reports = all, pendingReports = all.count { it.status == "pending" })
+        return (submitted + SeedMenus.reports(now)[menu.id].orEmpty()).sortedByDescending { it.createdAt }
     }
 
     @Synchronized

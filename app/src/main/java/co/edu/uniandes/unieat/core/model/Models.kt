@@ -21,7 +21,6 @@ data class DailyMenu(
     val id: String,
     val title: String,
     val version: Int = 1,
-    val currentVersion: Int? = null,
     @Serializable(InstantSerializer::class) val validUntil: Instant,
     @Serializable(InstantSerializer::class) val publishedAt: Instant,
     @Serializable(InstantSerializer::class) val closedAt: Instant? = null,
@@ -41,12 +40,10 @@ data class DailyMenu(
     val waitSampleCount: Int = 0,
     @Serializable(InstantSerializer::class) val waitNewestReportAt: Instant? = null,
     val pendingReports: Int = 0,
-    val status: MenuStatus? = null,
     val relevanceScore: Int = 0,
     val travelMinutes: Int? = null,
     val travelEvidence: TravelEvidence? = null,
     val explanation: String = "Menú vigente",
-    val reports: List<MenuReport> = emptyList(),
 ) {
     fun isActive(at: Instant = Instant.now()): Boolean = publishedAt <= at && validUntil > at
 

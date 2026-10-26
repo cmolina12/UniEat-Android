@@ -11,7 +11,8 @@ interface MenuRepository {
     /** GET /feed — ranked by rank-v1; the first item is "Elige por mí". */
     suspend fun feed(filters: FeedFilters): FeedResponse
 
-    suspend fun menu(id: String): MenuDetailResponse
+    /** [automatic] marks reloads the app makes on its own, so they do not count as detail views (BQ-04). */
+    suspend fun menu(id: String, automatic: Boolean = false): MenuDetailResponse
 
     suspend fun myMenus(): List<DailyMenu>
 

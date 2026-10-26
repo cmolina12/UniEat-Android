@@ -95,15 +95,14 @@ class LocationGuidanceTest {
     @Test
     fun onlyPendingLocationReportsCountAsUnresolved() {
         val guidance = locationGuidance(
-            menu(
-                reports = listOf(
-                    report(ReportKind.LOCATION, "pending"),
-                    report(ReportKind.LOCATION, "pending"),
-                    report(ReportKind.LOCATION, "dismissed"),
-                    report(ReportKind.LOCATION, "confirmed"),
-                    report(ReportKind.PRICE, "pending"),
-                    report(ReportKind.UNAVAILABLE, "pending"),
-                ),
+            menu(),
+            listOf(
+                report(ReportKind.LOCATION, "pending"),
+                report(ReportKind.LOCATION, "pending"),
+                report(ReportKind.LOCATION, "dismissed"),
+                report(ReportKind.LOCATION, "confirmed"),
+                report(ReportKind.PRICE, "pending"),
+                report(ReportKind.UNAVAILABLE, "pending"),
             ),
         )
 
@@ -115,7 +114,8 @@ class LocationGuidanceTest {
     @Test
     fun pendingReportsOfOtherKindsDoNotTriggerLocationWarning() {
         val guidance = locationGuidance(
-            menu(photoUrl = "https://cdn.test/p.jpg", reports = listOf(report(ReportKind.PRICE, "pending"))),
+            menu(photoUrl = "https://cdn.test/p.jpg"),
+            listOf(report(ReportKind.PRICE, "pending")),
         )
 
         assertEquals(0, guidance.pendingLocationReports)
@@ -134,7 +134,6 @@ class LocationGuidanceTest {
         address: String = "Carrera 1 #18A-70",
         entrance: String = "Local junto a la esquina del bloque B",
         photoUrl: String? = null,
-        reports: List<MenuReport> = emptyList(),
     ) = DailyMenu(
         id = "10000000-0000-4000-8000-000000000002",
         title = "Tazón completo",
@@ -149,8 +148,11 @@ class LocationGuidanceTest {
         longitude = longitude,
         photoUrl = photoUrl,
         lowestPriceCop = 12_000,
-        reports = reports,
     )
+
+    /** Most cases are about the menu's own fields; the reports come empty, as for a menu without any. */
+    private fun locationGuidance(menu: DailyMenu, reports: List<MenuReport> = emptyList()) =
+        co.edu.uniandes.unieat.core.decision.locationGuidance(menu, reports)
 
     private var reportCount = 0
 

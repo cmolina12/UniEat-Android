@@ -19,6 +19,10 @@ data class MenuDetailResponse(
     @Serializable(InstantSerializer::class) val serverNow: Instant,
     @Serializable(InstantSerializer::class) val fetchedAt: Instant,
     val menu: DailyMenu,
+    // Detail-only data about the current version; the feed never sends it, so it stays out of DailyMenu.
+    val status: MenuStatus? = null,
+    val currentVersion: Int? = null,
+    val reports: List<MenuReport> = emptyList(),
 )
 
 @Serializable
