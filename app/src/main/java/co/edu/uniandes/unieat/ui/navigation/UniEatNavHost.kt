@@ -45,7 +45,8 @@ import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
-import co.edu.uniandes.unieat.ui.screens.PublishScreen
+import co.edu.uniandes.unieat.ui.publish.PublishScreen
+import co.edu.uniandes.unieat.ui.publish.PublishViewModel
 import co.edu.uniandes.unieat.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -136,7 +137,12 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSessionExpired = expireSession,
                 )
             }
-            composable<Publish> { PublishScreen() }
+            composable<Publish> {
+                val vm: PublishViewModel = viewModel(
+                    factory = simpleFactory { PublishViewModel(container.menuRepository, container.establishmentRepository) },
+                )
+                PublishScreen(vm = vm, onSessionExpired = expireSession)
+            }
             composable<Performance> {
                 PerformanceScreen(
                     role = role,
@@ -182,8 +188,12 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
     override fun <T : ViewModel> create(modelClass: Class<T>): T = builder() as T
 }
 
-/** Context-aware UX: publishing is restaurant-only; performance is restaurant/admin. Backend authorization remains authoritative. */
+/**
+ * Context-aware UX, same tabs as iOS: a restaurant gets "Publicar" in place of "Elige por mí";
+ * performance is restaurant/admin. Backend authorization remains authoritative.
+ */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
+    Tab.RECOMMEND -> demo || role != "restaurant"
     Tab.PUBLISH -> demo || role == "restaurant"
     Tab.PERFORMANCE -> demo || role == "restaurant" || role == "admin"
     else -> true

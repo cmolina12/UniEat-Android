@@ -35,6 +35,9 @@ import co.edu.uniandes.unieat.data.repository.ReportRepository
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
 import co.edu.uniandes.unieat.data.repository.RemoteProfileRepository
 import co.edu.uniandes.unieat.data.repository.FakeProfileRepository
+import co.edu.uniandes.unieat.data.repository.EstablishmentRepository
+import co.edu.uniandes.unieat.data.repository.FakeEstablishmentRepository
+import co.edu.uniandes.unieat.data.repository.RemoteEstablishmentRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,6 +60,10 @@ class AppContainer(
     val apiClient: ApiClient by lazy { ApiClient(config, tokenProvider) }
     val profileRepository: ProfileRepository by lazy {
         if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
+    }
+
+    val establishmentRepository: EstablishmentRepository by lazy {
+        if (usesFakeData) FakeEstablishmentRepository() else RemoteEstablishmentRepository(apiClient)
     }
 
     private val fakeMenuRepository: MenuRepository? = if (!config.isConfigured) DevDataSource.menuRepository() else null

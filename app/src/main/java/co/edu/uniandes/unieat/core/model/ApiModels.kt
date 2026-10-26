@@ -86,6 +86,21 @@ data class EstablishmentMembership(
     @Serializable(InstantSerializer::class) val approvedAt: Instant? = null,
 )
 
+/** One establishment of GET /establishments/mine; only approved ones can publish. */
+@Serializable
+data class OwnEstablishment(
+    val id: String,
+    val name: String,
+    val area: String,
+    val address: String = "",
+    val entranceDescription: String = "",
+    val paymentMethods: List<String> = emptyList(),
+    val approved: Boolean = false,
+)
+
+@Serializable
+data class EstablishmentsResponse(val establishments: List<OwnEstablishment>)
+
 @Serializable
 data class ReportBody(
     val publicationId: String,
