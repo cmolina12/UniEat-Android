@@ -39,6 +39,7 @@ class AppShellViewModelTest {
         val auth = object : AuthRepository {
             override suspend fun signIn(email: String, password: String) = error("unused")
             override suspend fun refresh(refreshToken: String) = Session("new", "r2", now.plusSeconds(3600), "u")
+            override suspend fun signUp(email: String, password: String, displayName: String): Session? = error("unused")
             override suspend fun signOut(accessToken: String) = Unit
         }
         val sessions = SessionManager(auth, store, { now }, this)
@@ -84,6 +85,7 @@ private class ShellProfiles(private var failures: Int) : ProfileRepository {
 private class ShellAuth : AuthRepository {
     override suspend fun signIn(email: String, password: String) = error("unused")
     override suspend fun refresh(refreshToken: String) = error("unused")
+    override suspend fun signUp(email: String, password: String, displayName: String): Session? = error("unused")
     override suspend fun signOut(accessToken: String) = Unit
 }
 private class ShellStore(private var value: Session?) : SessionPersistence {

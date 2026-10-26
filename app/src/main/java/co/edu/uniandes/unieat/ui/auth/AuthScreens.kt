@@ -24,12 +24,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import co.edu.uniandes.unieat.data.auth.SupabaseAuthRepository
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
+import co.edu.uniandes.unieat.ui.theme.ChipRow
+import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 
@@ -40,11 +44,15 @@ fun LoginScreen(
     onSignedIn: () -> Unit,
 ) {
     val state by vm.state.collectAsState()
-    // The email survives rotation and process death; the password is dropped on purpose.
+    // The email and name survive rotation and process death; the password is dropped on purpose.
+    var registering by rememberSaveable { mutableStateOf(false) }
+    var displayName by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     val hasError = state is LoginState.Error
+    val loading = state is LoginState.Loading
+    val submit = { if (registering) vm.signUp(displayName, email, password) else vm.signIn(email, password) }
 
     LaunchedEffect(state) {
         if (state is LoginState.Success) onSignedIn()
@@ -54,8 +62,33 @@ fun LoginScreen(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        BrandHeader("Ingresar")
+        BrandHeader(if (registering) "Crear cuenta" else "Ingresar")
+        ChipRow(
+            options = listOf(false, true),
+            isSelected = { it == registering },
+            label = { if (it) "Crear cuenta" else "Entrar" },
+            onSelect = {
+                if (!loading && it != registering) {
+                    registering = it
+                    vm.resetMessage()
+                }
+            },
+        )
         SurfaceCard {
+            if (registering) {
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it.take(NAME_MAX) },
+                    label = { Text("Nombre") },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Next,
+                    ),
+                    isError = hasError,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -72,6 +105,11 @@ fun LoginScreen(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Contraseña") },
+                supportingText = if (registering) {
+                    { Text("Mínimo ${SupabaseAuthRepository.MIN_PASSWORD_LENGTH} caracteres") }
+                } else {
+                    null
+                },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(onClick = { showPassword = !showPassword }) {
@@ -82,7 +120,7 @@ fun LoginScreen(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
                 ),
-                keyboardActions = KeyboardActions(onDone = { vm.signIn(email, password) }),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
                 isError = hasError,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -90,15 +128,31 @@ fun LoginScreen(
             if (state is LoginState.Error) {
                 Text((state as LoginState.Error).message, color = MaterialTheme.colorScheme.error)
             }
+            if (state is LoginState.ConfirmEmail) {
+                Text("Revisa tu correo para confirmar la cuenta y luego inicia sesión.", color = Palette.Ink)
+            }
         }
         SolidButton(
-            title = if (state is LoginState.Loading) "Ingresando…" else "Ingresar",
-            onClick = { vm.signIn(email, password) },
-            enabled = state !is LoginState.Loading,
+            title = when {
+                loading -> if (registering) "Creando cuenta…" else "Ingresando…"
+                registering -> "Crear cuenta"
+                else -> "Ingresar"
+            },
+            onClick = submit,
+            enabled = !loading,
         )
+        if (registering) {
+            Text(
+                "Las cuentas nuevas son de estudiante. Para publicar menús, un administrador debe aprobarte como restaurante.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (demo) SolidButton("Entrar (demo)", onClick = onSignedIn)
     }
 }
+
+private const val NAME_MAX = 80
 
 @Composable
 fun ProfileScreen(

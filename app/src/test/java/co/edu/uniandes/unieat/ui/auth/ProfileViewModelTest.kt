@@ -52,6 +52,7 @@ internal fun sessionManager(scope: kotlinx.coroutines.CoroutineScope): SessionMa
     object : AuthRepository {
         override suspend fun signIn(email: String, password: String) = error("unused")
         override suspend fun refresh(refreshToken: String) = error("unused")
+        override suspend fun signUp(email: String, password: String, displayName: String): Session? = error("unused")
         override suspend fun signOut(accessToken: String) = Unit
     },
     object : SessionPersistence {

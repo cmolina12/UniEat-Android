@@ -40,6 +40,13 @@ class SessionManager(
         repository.signIn(email.trim(), password).also { persist(it) }
     }
 
+    /** Returns false when the account still has to be confirmed by email. */
+    suspend fun signUp(email: String, password: String, displayName: String): Boolean = mutex.withLock {
+        val created = repository.signUp(email.trim(), password, displayName.trim()) ?: return@withLock false
+        persist(created)
+        true
+    }
+
     /** Remote logout is best-effort. Local credentials are always removed. */
     suspend fun signOut() = mutex.withLock {
         val current = session ?: store.load()

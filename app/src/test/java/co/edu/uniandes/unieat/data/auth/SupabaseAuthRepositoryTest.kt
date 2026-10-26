@@ -35,5 +35,22 @@ class SupabaseAuthRepositoryTest {
   val repo=SupabaseAuthRepository(config,HttpClient(engine){install(ContentNegotiation){json(UniEatJson)}})
   try{repo.signIn("a@b.co","pw");fail("expected")}catch(e:ApiException){assertEquals(ApiException.RATE_LIMITED,e.code)}
  }
+ @Test fun `sign up sends only the display name and maps the session`()=runTest{
+  var path=""; var body=""
+  val engine=MockEngine{r->path=r.url.encodedPath; body=(r.body as io.ktor.http.content.TextContent).text; respond("""{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"id":"u"}}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))}
+  val repo=SupabaseAuthRepository(config,HttpClient(engine){install(ContentNegotiation){json(UniEatJson)}},{Instant.EPOCH})
+  val s=repo.signUp("a@b.co","secret","Ana")
+  assertEquals("/auth/v1/signup",path); assertTrue(body.contains("\"display_name\":\"Ana\"")); assertFalse(body.contains("role")); assertEquals("u",s?.userId)
+ }
+ @Test fun `sign up waiting for email confirmation returns no session`()=runTest{
+  val engine=MockEngine{respond("""{"id":"u","email":"a@b.co","confirmation_sent_at":"2026-10-25T12:00:00Z"}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))}
+  val repo=SupabaseAuthRepository(config,HttpClient(engine){install(ContentNegotiation){json(UniEatJson)}})
+  assertNull(repo.signUp("a@b.co","secret","Ana"))
+ }
+ @Test fun `sign up with a taken email explains it`()=runTest{
+  val engine=MockEngine{respond("""{"code":422,"error_code":"user_already_exists","msg":"User already registered"}""",HttpStatusCode.UnprocessableEntity,headersOf(HttpHeaders.ContentType,"application/json"))}
+  val repo=SupabaseAuthRepository(config,HttpClient(engine){install(ContentNegotiation){json(UniEatJson)}})
+  try{repo.signUp("a@b.co","secret","Ana");fail("expected")}catch(e:ApiException){assertEquals(ApiException.VALIDATION_ERROR,e.code);assertTrue(e.message!!.contains("Ya existe"))}
+ }
 
 }
