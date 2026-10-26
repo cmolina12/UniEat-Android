@@ -2,6 +2,7 @@ package co.edu.uniandes.unieat.ui.publish
 
 import co.edu.uniandes.unieat.core.model.CloseResponse
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.core.model.EstablishmentRequestBody
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.FeedResponse
 import co.edu.uniandes.unieat.core.model.MenuBody
@@ -183,6 +184,8 @@ class PublishViewModelTest {
 
 private class StubEstablishments(private val establishments: List<OwnEstablishment>) : EstablishmentRepository {
     override suspend fun mine(): List<OwnEstablishment> = establishments
+
+    override suspend fun request(body: EstablishmentRequestBody): String = error("not used")
 }
 
 private class StubMenus(

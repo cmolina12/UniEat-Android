@@ -45,6 +45,11 @@ import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
+import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
+import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
+import co.edu.uniandes.unieat.ui.profile.AdminViewModel
+import co.edu.uniandes.unieat.ui.profile.EstablishmentsSection
+import co.edu.uniandes.unieat.ui.profile.EstablishmentsViewModel
 import co.edu.uniandes.unieat.ui.publish.PublishScreen
 import co.edu.uniandes.unieat.ui.publish.PublishViewModel
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -152,9 +157,34 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             }
             composable<Profile> {
                 val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(container.profileRepository, container.sessionManager) })
-                ProfileScreen(vm = vm, onSignedOut = {
-                    navController.navigate(Login) { popUpTo(0) { inclusive = true } }
-                })
+                ProfileScreen(
+                    vm = vm,
+                    onSignedOut = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
+                    roleSections = { me ->
+                        if (me.role == "admin") {
+                            val admin: AdminViewModel = viewModel(factory = simpleFactory { AdminViewModel(container.adminRepository) })
+                            AdminApprovalsSection(admin)
+                            AdminRolesSection(admin, currentUserId = me.id)
+                        } else {
+                            val establishments: EstablishmentsViewModel = viewModel(
+                                factory = simpleFactory {
+                                    EstablishmentsViewModel(
+                                        container.profileRepository,
+                                        container.establishmentRepository,
+                                        container.locationRepository,
+                                        container.addressGeocoder,
+                                        // An approval can turn the account into a restaurant: tabs and role refresh.
+                                        onAccountChanged = {
+                                            shell.retryProfile()
+                                            vm.refresh()
+                                        },
+                                    )
+                                },
+                            )
+                            EstablishmentsSection(establishments)
+                        }
+                    },
+                )
             }
         }
     }
