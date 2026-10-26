@@ -48,6 +48,7 @@ import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.MenuDish
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
+import co.edu.uniandes.unieat.ui.detail.Validity
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
@@ -220,10 +221,8 @@ internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Sticker(menu.area, color = Palette.Cyan, icon = Icons.Filled.Place)
+                ValiditySticker(menu, now)
                 WaitSticker(menu, now)
-                if (menu.validUntil <= now + EXPIRING_SOON) {
-                    Sticker("Menú por vencer", color = Palette.Coral, icon = Icons.Filled.Warning)
-                }
                 if (menu.pendingReports > 0) {
                     Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
                 }
@@ -237,6 +236,16 @@ internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
  * BQ-06: the backend computes the wait (`waitMinutes`); the app only shows it when the
  * evidence rule holds (≥3 samples, newest within 30 min). Without evidence, no number is invented.
  */
+/** Until when the menu is valid; in its last 30 minutes, how many minutes are left. */
+@Composable
+private fun ValiditySticker(menu: DailyMenu, now: Instant) {
+    when (val validity = Validity.of(menu, now)) {
+        Validity.Active -> Sticker("Hasta ${SpanishPresentation.time(menu.validUntil)}", color = Palette.Paper)
+        is Validity.Expiring -> Sticker("Vence en ${validity.minutesLeft} min", color = Palette.Coral, icon = Icons.Filled.Warning)
+        Validity.Expired -> Sticker("Vencido", color = Palette.Coral, icon = Icons.Filled.Warning)
+    }
+}
+
 @Composable
 private fun WaitSticker(menu: DailyMenu, now: Instant) {
     val wait = menu.waitMinutes
@@ -270,7 +279,6 @@ internal fun FeedStatusCard(title: String, body: String, action: (@Composable ()
     }
 }
 
-private val EXPIRING_SOON: Duration = Duration.ofMinutes(30)
 
 @Preview(showBackground = true, backgroundColor = 0xFFF5F0E6, heightDp = 900)
 @Composable
