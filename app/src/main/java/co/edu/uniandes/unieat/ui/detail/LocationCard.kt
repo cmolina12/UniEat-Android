@@ -92,6 +92,9 @@ fun LocationCard(
 
             DistanceSection(distance, actions)
 
+            guidance.address?.let { ReferenceRow(Icons.Filled.Place, it) }
+                ?: MissingReference(LocationReference.ADDRESS)
+
             guidance.photoUrl?.let { url ->
                 AsyncImage(
                     model = url,
@@ -103,9 +106,6 @@ fun LocationCard(
                         .clip(RoundedCornerShape(10.dp)),
                 )
             } ?: MissingReference(LocationReference.PHOTO)
-
-            guidance.address?.let { ReferenceRow(Icons.Filled.Place, it) }
-                ?: MissingReference(LocationReference.ADDRESS)
 
             guidance.entranceDescription?.let { ReferenceRow(Icons.Filled.Info, "Entrada: $it") }
                 ?: MissingReference(LocationReference.ENTRANCE)
