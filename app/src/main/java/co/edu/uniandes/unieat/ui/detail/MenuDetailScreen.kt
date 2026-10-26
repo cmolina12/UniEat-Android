@@ -246,7 +246,7 @@ private fun MenuBody(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Sticker(menu.area, color = Palette.Cyan, icon = Icons.Filled.Place)
         when (val validity = Validity.of(menu, now)) {
-            Validity.Active -> Sticker("Vigente", color = Palette.Green, icon = Icons.Filled.CheckCircle)
+            Validity.Active -> Sticker("Vigente hasta ${SpanishPresentation.time(menu.validUntil)}", color = Palette.Green, icon = Icons.Filled.CheckCircle)
             is Validity.Expiring -> Sticker("Por vencer · ${validity.minutesLeft} min", color = Palette.Yellow, icon = Icons.Filled.Warning)
             Validity.Expired -> Sticker("Vencido", color = Palette.Coral, icon = Icons.Filled.Warning)
         }
@@ -345,7 +345,7 @@ private fun DishCard(dish: MenuDish) {
                 Text(
                     when {
                         !dish.dietaryKnown -> "Dieta sin confirmar"
-                        dish.dietaryTags.isEmpty() -> "Dieta declarada"
+                        dish.dietaryTags.isEmpty() -> "No es vegetariano ni vegano"
                         else -> SpanishPresentation.dietaryTags(dish.dietaryTags)
                     },
                     fontSize = 12.sp,
