@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
+import co.edu.uniandes.unieat.ui.theme.DismissWhenHidden
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
@@ -83,10 +84,12 @@ fun ReportSheet(
     var note by rememberSaveable { mutableStateOf("") }
     var waitMinutes by rememberSaveable { mutableIntStateOf(20) }
     val sending = submission is ReportSubmission.Sending
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    DismissWhenHidden(sheetState, onDismiss)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = Palette.Cream,
     ) {
         Column(

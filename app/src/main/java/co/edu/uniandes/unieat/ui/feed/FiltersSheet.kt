@@ -11,6 +11,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.ui.theme.ChipRow
+import co.edu.uniandes.unieat.ui.theme.DismissWhenHidden
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.cop
@@ -43,8 +45,10 @@ fun FiltersSheet(
 ) {
     // Plain remember: FeedFilters is not Parcelable, and losing a half-edited draft on rotation is fine.
     var draft by remember { mutableStateOf(current) }
+    val sheetState = rememberModalBottomSheetState()
+    DismissWhenHidden(sheetState, onDismiss)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.Paper) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Palette.Paper) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())
