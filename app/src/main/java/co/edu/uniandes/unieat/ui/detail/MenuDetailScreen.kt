@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -61,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import co.edu.uniandes.unieat.DemoFixture
 import co.edu.uniandes.unieat.core.decision.LocationGuidance
 import co.edu.uniandes.unieat.core.model.DailyMenu
@@ -238,7 +240,7 @@ private fun MenuBody(
 ) {
     val active = menu.isActive(now)
 
-    FoodArtwork(menu.establishmentName)
+    FoodArtwork(menu.establishmentName, menu.photoUrl?.takeIf { it.isNotBlank() })
     Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(menu.establishmentName, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
@@ -360,7 +362,7 @@ private fun DishCard(dish: MenuDish) {
 }
 
 @Composable
-private fun FoodArtwork(name: String) {
+private fun FoodArtwork(name: String, photoUrl: String?) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -375,6 +377,14 @@ private fun FoodArtwork(name: String) {
                 .size(140.dp)
                 .background(Color.White.copy(alpha = 0.45f), CircleShape),
         )
+        photoUrl?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = "Foto de $name",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Text(
             name.uppercase(),
             fontSize = 12.sp,
