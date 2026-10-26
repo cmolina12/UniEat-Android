@@ -50,6 +50,7 @@ import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
+import co.edu.uniandes.unieat.ui.theme.FoodArtwork
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.Sticker
@@ -205,12 +206,13 @@ private fun FilterButton(onClick: () -> Unit) {
     )
 }
 
-/** One feed card: name, price, the BQ-06 wait estimate and the backend's rank explanation. */
+/** One feed card: photo (or drawing), name, price, the BQ-06 wait estimate and the backend's rank explanation. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
     SurfaceCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FoodArtwork(menu.establishmentName, menu.photoUrl, height = 130.dp)
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(menu.establishmentName, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
