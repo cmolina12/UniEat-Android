@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat.core.decision
 
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.core.model.MenuReport
 import co.edu.uniandes.unieat.core.model.ReportKind
 import java.time.Instant
 
@@ -30,12 +31,13 @@ data class LocationGuidance(
     val needsWarning: Boolean get() = missing.isNotEmpty() || hasUnresolvedDiscrepancies
 }
 
-fun locationGuidance(menu: DailyMenu): LocationGuidance = LocationGuidance(
+/** [reports] are the current version's reports from the detail response (empty for a saved feed menu). */
+fun locationGuidance(menu: DailyMenu, reports: List<MenuReport>): LocationGuidance = LocationGuidance(
     pin = coordinateOrNull(menu.latitude, menu.longitude),
     photoUrl = menu.photoUrl.nonBlank(),
     address = menu.address.nonBlank(),
     entranceDescription = menu.entranceDescription.nonBlank(),
-    pendingLocationReports = menu.reports.count { it.kind == ReportKind.LOCATION && it.status == "pending" },
+    pendingLocationReports = reports.count { it.kind == ReportKind.LOCATION && it.status == "pending" },
     updatedAt = menu.publishedAt,
 )
 

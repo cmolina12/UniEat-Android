@@ -64,7 +64,6 @@ class ApiContractTest {
         assertEquals(listOf("vegetarian", "vegan"), menu.items.single().dietaryTags)
         assertNull(menu.waitMinutes)
         assertNull(menu.closedAt)
-        assertEquals(MenuStatus.ACTIVE, menu.status)
         assertEquals(TravelEvidence.APPROXIMATE, menu.travelEvidence)
         assertTrue(menu.isActive(feed.serverNow))
         assertFalse(menu.hasWaitEvidence(feed.serverNow))
@@ -82,17 +81,31 @@ class ApiContractTest {
         assertEquals("/functions/v1/api-v1/menus/10000000-0000-4000-8000-000000000002", request.url.encodedPath)
         assertEquals("Bearer jwt-token", request.headers[HttpHeaders.Authorization])
 
+        assertNull("a normal open counts as a detail view", request.url.parameters["refresh"])
+
         val menu = detail.menu
         assertEquals(Instant.parse("2026-09-29T17:20:34.728Z"), detail.serverNow)
-        assertEquals(3, menu.reports.size)
-        assertEquals(co.edu.uniandes.unieat.core.model.ReportKind.LOCATION, menu.reports[0].kind)
-        assertNull(menu.reports[0].resolvedAt)
-        assertEquals(Instant.parse("2026-09-29T17:15:00.000Z"), menu.reports[1].resolvedAt)
+        assertEquals(MenuStatus.ACTIVE, detail.status)
+        assertEquals(1, detail.currentVersion)
+        assertEquals(3, detail.reports.size)
+        assertEquals(co.edu.uniandes.unieat.core.model.ReportKind.LOCATION, detail.reports[0].kind)
+        assertNull(detail.reports[0].resolvedAt)
+        assertEquals(Instant.parse("2026-09-29T17:15:00.000Z"), detail.reports[1].resolvedAt)
 
-        val guidance = co.edu.uniandes.unieat.core.decision.locationGuidance(menu)
+        val guidance = co.edu.uniandes.unieat.core.decision.locationGuidance(menu, detail.reports)
         assertEquals(1, guidance.pendingLocationReports)
         assertEquals(setOf(co.edu.uniandes.unieat.core.decision.LocationReference.PHOTO), guidance.missing)
         assertEquals(Instant.parse("2026-09-29T16:34:11.216Z"), guidance.updatedAt)
+    }
+
+    @Test
+    fun automaticDetailReloadIsMarkedSoItDoesNotCountAsAView() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val repo = RemoteMenuRepository(client(HttpStatusCode.OK, DETAIL_SAMPLE, seen))
+
+        repo.menu("10000000-0000-4000-8000-000000000002", automatic = true)
+
+        assertEquals("auto", seen.single().url.parameters["refresh"])
     }
 
     @Test
@@ -294,12 +307,15 @@ class ApiContractTest {
             "waitMinutes": null, "waitSampleCount": 1, "waitNewestReportAt": "2026-09-29T17:09:11.216Z",
             "pendingReports": 2, "status": "active", "relevanceScore": 0,
             "explanation": "Menú vigente",
-            "reports": [
-              {"id":"r1","kind":"location","status":"pending","createdAt":"2026-09-29T17:10:00.000Z","resolvedAt":null},
-              {"id":"r2","kind":"location","status":"dismissed","createdAt":"2026-09-29T17:00:00.000Z","resolvedAt":"2026-09-29T17:15:00.000Z"},
-              {"id":"r3","kind":"price","status":"pending","createdAt":"2026-09-29T16:50:00.000Z","resolvedAt":null}
-            ]
-          }
+            "reports": []
+          },
+          "status": "active",
+          "currentVersion": 1,
+          "reports": [
+            {"id":"r1","kind":"location","status":"pending","createdAt":"2026-09-29T17:10:00.000Z","resolvedAt":null},
+            {"id":"r2","kind":"location","status":"dismissed","createdAt":"2026-09-29T17:00:00.000Z","resolvedAt":"2026-09-29T17:15:00.000Z"},
+            {"id":"r3","kind":"price","status":"pending","createdAt":"2026-09-29T16:50:00.000Z","resolvedAt":null}
+          ]
         }"""
 
         const val FEED_SAMPLE = """

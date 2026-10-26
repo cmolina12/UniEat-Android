@@ -15,6 +15,8 @@ import co.edu.uniandes.unieat.core.decision.Proximity
 import co.edu.uniandes.unieat.core.decision.locationGuidance
 import co.edu.uniandes.unieat.core.decision.proximity
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.core.model.MenuDetailResponse
+import co.edu.uniandes.unieat.core.model.MenuReport
 import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.analytics.EventKind
@@ -51,8 +53,13 @@ sealed interface MenuDetailUiState {
     data object Loading : MenuDetailUiState
 
     /** [savedAt] is set when the device is offline and the menu comes from the last saved feed. */
-    data class Content(val menu: DailyMenu, val clockOffset: Duration, val savedAt: Instant? = null) : MenuDetailUiState {
-        val location: LocationGuidance = locationGuidance(menu)
+    data class Content(
+        val menu: DailyMenu,
+        val clockOffset: Duration,
+        val savedAt: Instant? = null,
+        val reports: List<MenuReport> = emptyList(),
+    ) : MenuDetailUiState {
+        val location: LocationGuidance = locationGuidance(menu, reports)
     }
 
     data class Gone(val message: String) : MenuDetailUiState
@@ -165,7 +172,7 @@ class MenuDetailViewModel(
             _state.value = try {
                 val response = repository.menu(menuId)
                 trackOpen(response.menu)
-                MenuDetailUiState.Content(response.menu, Duration.between(deviceClock(), response.serverNow))
+                response.toContent()
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
@@ -183,6 +190,9 @@ class MenuDetailViewModel(
             }
         }
     }
+
+    private fun MenuDetailResponse.toContent() =
+        MenuDetailUiState.Content(menu, Duration.between(deviceClock(), serverNow), reports = reports)
 
     private fun trackOpen(menu: DailyMenu) {
         if (openTracked) return
@@ -258,8 +268,7 @@ class MenuDetailViewModel(
 
     private suspend fun refreshQuietly() {
         try {
-            val response = repository.menu(menuId)
-            _state.value = MenuDetailUiState.Content(response.menu, Duration.between(deviceClock(), response.serverNow))
+            _state.value = repository.menu(menuId, automatic = true).toContent()
         } catch (_: ApiException) {
         }
     }

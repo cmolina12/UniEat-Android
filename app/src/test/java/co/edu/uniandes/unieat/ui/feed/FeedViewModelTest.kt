@@ -303,7 +303,7 @@ class FeedViewModelTest {
 
     internal class StubRepository(private val onFeed: suspend (FeedFilters) -> FeedResponse) : MenuRepository {
         override suspend fun feed(filters: FeedFilters): FeedResponse = onFeed(filters)
-        override suspend fun menu(id: String): MenuDetailResponse = error("unused")
+        override suspend fun menu(id: String, automatic: Boolean): MenuDetailResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")
         override suspend fun publish(body: MenuBody): DailyMenu = error("unused")
         override suspend fun revise(id: String, body: MenuBody): DailyMenu = error("unused")

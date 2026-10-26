@@ -76,7 +76,6 @@ object SeedMenus {
                 ),
                 lowestPriceCop = 9_000,
                 waitMinutes = 5, waitSampleCount = 3, waitNewestReportAt = ago(15),
-                reports = listOf(report(ELVIRA, 1, ReportKind.PRICE, "pending", ago(20))),
             ),
             DailyMenu(
                 id = NUEVO_SABOR, title = "Corrientazo del día",
@@ -99,12 +98,6 @@ object SeedMenus {
                 paymentMethods = listOf("Efectivo", "Nequi"),
                 items = listOf(dish(AREPAS, 0, "Arepa de queso y pollo", 8_500, dietaryKnown = false)),
                 lowestPriceCop = 8_500,
-                reports = listOf(
-                    report(AREPAS, 1, ReportKind.LOCATION, "pending", ago(12)),
-                    report(AREPAS, 2, ReportKind.LOCATION, "pending", ago(40)),
-                    report(AREPAS, 3, ReportKind.LOCATION, "dismissed", ago(80), resolvedAt = ago(60)),
-                    report(AREPAS, 4, ReportKind.PRICE, "pending", ago(30)),
-                ),
             ),
             DailyMenu(
                 id = EXPIRED, title = "Desayuno",
@@ -116,7 +109,22 @@ object SeedMenus {
                 items = listOf(dish(EXPIRED, 0, "Changua", 7_000)),
                 lowestPriceCop = 7_000,
             ),
-        ).map { it.copy(pendingReports = it.reports.count { r -> r.status == "pending" }) }
+        )
+    }
+
+    /** Seeded reports per menu id; like the backend, they travel next to the menu, not inside it. */
+    fun reports(now: Instant): Map<String, List<MenuReport>> {
+        fun ago(minutes: Long) = now - Duration.ofMinutes(minutes)
+
+        return mapOf(
+            ELVIRA to listOf(report(ELVIRA, 1, ReportKind.PRICE, "pending", ago(20))),
+            AREPAS to listOf(
+                report(AREPAS, 1, ReportKind.LOCATION, "pending", ago(12)),
+                report(AREPAS, 2, ReportKind.LOCATION, "pending", ago(40)),
+                report(AREPAS, 3, ReportKind.LOCATION, "dismissed", ago(80), resolvedAt = ago(60)),
+                report(AREPAS, 4, ReportKind.PRICE, "pending", ago(30)),
+            ),
+        )
     }
 
     private fun dish(

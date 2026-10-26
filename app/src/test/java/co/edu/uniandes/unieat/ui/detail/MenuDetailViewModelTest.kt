@@ -240,7 +240,13 @@ class MenuDetailViewModelTest {
     )
 
     internal class StubRepository(private val detail: suspend () -> MenuDetailResponse) : MenuRepository {
-        override suspend fun menu(id: String) = detail()
+        /** One entry per detail call: true when the app marked it as an automatic reload. */
+        val automaticCalls = mutableListOf<Boolean>()
+
+        override suspend fun menu(id: String, automatic: Boolean): MenuDetailResponse {
+            automaticCalls += automatic
+            return detail()
+        }
         override suspend fun feed(filters: FeedFilters): FeedResponse = error("unused")
         override suspend fun myMenus(): List<DailyMenu> = error("unused")
         override suspend fun publish(body: MenuBody): DailyMenu = error("unused")

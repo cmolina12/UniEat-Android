@@ -17,15 +17,15 @@ class FakeReportLoopTest {
         val menus = FakeMenuRepository(latencyMillis = 0, clock = { now })
         val reports = FakeReportRepository(latencyMillis = 0, clock = { now })
         val ajiaco = SeedMenus.AJIACO
-        val before = locationGuidance(menus.menu(ajiaco).menu).pendingLocationReports
+        val before = menus.menu(ajiaco).let { locationGuidance(it.menu, it.reports) }.pendingLocationReports
 
         val response = reports.submit(ReportBody(ajiaco, 1, ReportKind.LOCATION))
         assertEquals("pending", response.status)
         reports.submit(ReportBody(ajiaco, 1, ReportKind.ACCURATE))
 
-        val after = menus.menu(ajiaco).menu
-        assertEquals(before + 1, locationGuidance(after).pendingLocationReports)
-        assertEquals(after.reports.count { it.status == "pending" }, after.pendingReports)
+        val after = menus.menu(ajiaco)
+        assertEquals(before + 1, locationGuidance(after.menu, after.reports).pendingLocationReports)
+        assertEquals(after.reports.count { it.status == "pending" }, after.menu.pendingReports)
 
         reports.submit(ReportBody(ajiaco, 1, ReportKind.PRICE))
         try {

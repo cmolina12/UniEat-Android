@@ -6,10 +6,12 @@ import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.core.model.FeedResponse
 import co.edu.uniandes.unieat.core.model.MenuBody
 import co.edu.uniandes.unieat.core.model.MenuDetailResponse
+import co.edu.uniandes.unieat.core.model.MenuStatus
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import kotlinx.coroutines.delay
+import java.time.Duration
 import java.time.Instant
 
 class FakeMenuRepository(
@@ -32,7 +34,7 @@ class FakeMenuRepository(
         else -> true
     }
 
-    override suspend fun menu(id: String): MenuDetailResponse {
+    override suspend fun menu(id: String, automatic: Boolean): MenuDetailResponse {
         delay(latencyMillis)
         val now = clock()
         val menu = FakeBackend.menus(now).firstOrNull { it.id == id }
@@ -44,7 +46,15 @@ class FakeMenuRepository(
                 410,
             )
         }
-        return MenuDetailResponse(serverNow = now, fetchedAt = now, menu = menu)
+        return MenuDetailResponse(
+            serverNow = now,
+            fetchedAt = now,
+            menu = menu,
+            // Same 30-minute threshold as the backend (LIMITS.expiringThresholdMinutes).
+            status = if (Duration.between(now, menu.validUntil) <= Duration.ofMinutes(30)) MenuStatus.EXPIRING else MenuStatus.ACTIVE,
+            currentVersion = menu.version,
+            reports = FakeBackend.reports(menu, now),
+        )
     }
 
     override suspend fun myMenus(): List<DailyMenu> = emptyList()

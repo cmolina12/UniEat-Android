@@ -37,13 +37,14 @@ class MenuDetailReportTest {
         establishmentId = "e", establishmentName = "Bowls", area = "Centro", lowestPriceCop = 12_000,
         latitude = 4.6036, longitude = -74.064,
     )
-    private var menuCalls = 0
+    private var serverReports = emptyList<MenuReport>()
+    private val repository = MenuDetailViewModelTest.StubRepository { MenuDetailResponse(now, now, serverMenu, reports = serverReports) }
     private val reports = StubReports()
     private val tracker = RecordingTracker()
 
     private fun viewModel() = MenuDetailViewModel(
         "m",
-        MenuDetailViewModelTest.StubRepository { menuCalls++; MenuDetailResponse(now, now, serverMenu) },
+        repository,
         StubLocation(),
         tracker,
         reports,
@@ -84,14 +85,15 @@ class MenuDetailReportTest {
         advanceUntilIdle()
         assertEquals(0, (vm.state.value as MenuDetailUiState.Content).location.pendingLocationReports)
 
-        serverMenu = serverMenu.copy(reports = listOf(MenuReport("r1", ReportKind.LOCATION, "pending", now)), pendingReports = 1)
+        serverReports = listOf(MenuReport("r1", ReportKind.LOCATION, "pending", now))
+        serverMenu = serverMenu.copy(pendingReports = 1)
         vm.submitReport(ReportKind.LOCATION, "", null)
         advanceUntilIdle()
 
         val content = vm.state.value as MenuDetailUiState.Content
         assertEquals(1, content.location.pendingLocationReports)
         assertTrue((vm.report.value as ReportSubmission.Sent).pending)
-        assertEquals("initial load + one quiet refresh", 2, menuCalls)
+        assertEquals("initial load + one quiet refresh", listOf(false, true), repository.automaticCalls)
     }
 
     @Test
@@ -100,7 +102,7 @@ class MenuDetailReportTest {
         advanceUntilIdle()
         vm.submitReport(ReportKind.ACCURATE, "", null)
         advanceUntilIdle()
-        assertEquals(1, menuCalls)
+        assertEquals(1, repository.automaticCalls.size)
     }
 
     @Test
