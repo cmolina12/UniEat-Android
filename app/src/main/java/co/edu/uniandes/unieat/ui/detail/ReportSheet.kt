@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.ThumbUp
@@ -104,6 +105,22 @@ fun ReportSheet(
         ) {
             BrandHeader("Reportar un cambio")
             Text("${menu.establishmentName} · versión ${menu.version} del menú", style = MaterialTheme.typography.bodyMedium)
+
+            if (submission is ReportSubmission.Queued) {
+                SurfaceCard(Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, tint = Palette.Ink)
+                        Text(submission.message, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(
+                        "Queda guardado en el teléfono aunque cierres la app.",
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                SolidButton("Cerrar", onClick = onDismiss, color = Palette.Yellow)
+                return@Column
+            }
 
             if (submission is ReportSubmission.Sent) {
                 SurfaceCard(Modifier.fillMaxWidth()) {

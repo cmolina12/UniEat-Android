@@ -92,6 +92,7 @@ fun MenuDetailScreen(
     val distance by viewModel.distance.collectAsStateWithLifecycle()
     val arrival by viewModel.arrival.collectAsStateWithLifecycle()
     val report by viewModel.report.collectAsStateWithLifecycle()
+    val queuedReports by viewModel.queuedReports.collectAsStateWithLifecycle()
     var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
     val openReport = { kind: ReportKind ->
         viewModel.onReportSheetOpened()
@@ -122,6 +123,7 @@ fun MenuDetailScreen(
             onReportNotFound = { openReport(ReportKind.NOT_FOUND) },
         ),
         onReport = { openReport(ReportKind.UNAVAILABLE) },
+        queuedReports = queuedReports,
         isDemo = viewModel.isDemo,
         fixtures = viewModel.fixtures,
         currentMenuId = menuId,
@@ -161,6 +163,7 @@ private fun MenuDetailContent(
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
     onReport: () -> Unit,
+    queuedReports: Int,
     isDemo: Boolean,
     fixtures: List<DemoFixture>,
     currentMenuId: String,
@@ -196,6 +199,7 @@ private fun MenuDetailContent(
                 recommendation?.let { RecommendationCard(it) }
                 MenuBody(
                     state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
+                    queuedReports,
                 )
             }
             is MenuDetailUiState.Gone -> StatusMessage(
@@ -233,6 +237,7 @@ private fun MenuBody(
     locationActions: LocationActions,
     onSelect: () -> Unit,
     onReport: () -> Unit,
+    queuedReports: Int,
 ) {
     val active = menu.isActive(now)
 
@@ -252,6 +257,14 @@ private fun MenuBody(
             Validity.Expired -> Sticker("Vencido", color = Palette.Coral, icon = Icons.Filled.Warning)
         }
         if (menu.pendingReports > 0) Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
+        // Saved in Room without internet; disappears by itself when the worker sends it.
+        if (queuedReports > 0) {
+            Sticker(
+                if (queuedReports == 1) "1 reporte esperando señal" else "$queuedReports reportes esperando señal",
+                color = Palette.Yellow,
+                icon = Icons.Filled.Refresh,
+            )
+        }
     }
 
     val arrived = (distance as? DistanceStatus.Known)?.proximity?.arrived == true
@@ -435,6 +448,7 @@ private fun MenuDetailPreview() = UniEatTheme {
         arrival = null,
         locationActions = LocationActions({}, {}, {}, {}, {}),
         onReport = {},
+        queuedReports = 0,
         isDemo = true,
         fixtures = emptyList(),
         currentMenuId = "preview",

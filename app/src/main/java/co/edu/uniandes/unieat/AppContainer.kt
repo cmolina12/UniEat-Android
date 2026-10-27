@@ -15,6 +15,9 @@ import co.edu.uniandes.unieat.data.analytics.FlushScheduler
 import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
+import co.edu.uniandes.unieat.data.local.ReportQueue
+import co.edu.uniandes.unieat.data.local.UniEatDatabase
+import co.edu.uniandes.unieat.data.local.WorkManagerReportScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
 import co.edu.uniandes.unieat.data.network.ConnectivityMonitor
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
@@ -115,6 +118,13 @@ class AppContainer(
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Local relational database (Room). Today it holds the reports waiting for a connection. */
+    private val database: UniEatDatabase by lazy { UniEatDatabase.build(context) }
+
+    val reportScheduler: FlushScheduler by lazy { WorkManagerReportScheduler(context) }
+
+    val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
+
     val analyticsRepository: AnalyticsRepository by lazy {
         (if (usesFakeData) DevDataSource.analyticsRepository() else null) ?: RemoteAnalyticsRepository(apiClient)
     }
@@ -132,7 +142,11 @@ class AppContainer(
     init {
         // The saved feed belongs to the user who loaded it.
         appScope.launch {
-            sessionManager.state.filterIsInstance<AuthState.SignedOut>().collect { feedCache?.clear() }
+            sessionManager.state.filterIsInstance<AuthState.SignedOut>().collect {
+                feedCache?.clear()
+                // Waiting reports would otherwise be sent with the next account's session.
+                reportQueue.clear()
+            }
         }
     }
 }
