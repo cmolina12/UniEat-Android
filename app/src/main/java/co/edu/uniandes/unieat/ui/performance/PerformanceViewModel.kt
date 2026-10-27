@@ -7,16 +7,21 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** What the dashboard can show. One state at a time, so the UI is a simple `when`. */
 sealed interface PerformanceUiState {
@@ -27,6 +32,7 @@ sealed interface PerformanceUiState {
         val feedLoadReport: FeedLoadReport? = null,
         val ownEstablishmentsOnly: Boolean = false,
         val locationGuidance: LocationGuidanceSnapshot? = null,
+        val locationCompleteness: LocationCompletenessSnapshot? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -47,6 +53,8 @@ class PerformanceViewModel(
     private val feedLoads: FeedLoadRepository? = null,
     private val role: String? = null,
     private val showLocationGuidance: Boolean = false,
+    /** Where the requests run. Tests pass their own dispatcher so they control the timing. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
@@ -59,15 +67,26 @@ class PerformanceViewModel(
         load()
     }
 
-    /** Fetches the metrics for the selected period. */
+    /**
+     * Fetches the metrics for the selected period. The outer coroutine runs on Main (viewModelScope);
+     * inside it, withContext moves to IO and four child coroutines (async) ask the backend at the same
+     * time. The screen waits for the slowest one instead of the sum of all four, and the result is
+     * published back on Main.
+     */
     fun load() {
         _state.value = PerformanceUiState.Loading
         viewModelScope.launch {
             _state.value = try {
                 val restaurant = role == ROLE_RESTAURANT
                 val days = _days.value
-                val summary = if (restaurant) repository.restaurantPerformance(days) else repository.performance(days)
-                PerformanceUiState.Content(summary, feedLoadReport(), restaurant, locationGuidance(days, restaurant))
+                withContext(io) {
+                    val summary = async { if (restaurant) repository.restaurantPerformance(days) else repository.performance(days) }
+                    val feedLoad = async { feedLoadReport() }
+                    val guidance = async { locationGuidance(days, restaurant) }
+                    val completeness = async { locationCompleteness(days) }
+                    // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
+                    PerformanceUiState.Content(summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await())
+                }
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
@@ -87,6 +106,12 @@ class PerformanceViewModel(
         return runCatching {
             if (restaurant) repository.restaurantLocationGuidance(days) else repository.locationGuidance(days)
         }.getOrNull()
+    }
+
+    /** BQ-10 (Camilo): shown with BQ-05, to the same roles; its failure never hides the rest. */
+    private suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot? {
+        if (!showLocationGuidance) return null
+        return runCatching { repository.locationCompleteness(days) }.getOrNull()
     }
 
     /** Switch between 7 and 28 days; picking the same period again does nothing. */

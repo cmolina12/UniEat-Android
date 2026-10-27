@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.CompletenessGroup
+import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
@@ -41,6 +43,7 @@ import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
+import kotlin.math.roundToInt
 
 @Composable
 fun PerformanceScreen(
@@ -116,6 +119,7 @@ private fun PerformanceContent(
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
                 FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
+                state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
             }
         }
     }
@@ -229,6 +233,56 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstabl
         TableRow(listOf("Indicación de entrada", "${c.withEntranceDescription}", "${c.withoutEntranceDescription}"))
         TableRow(listOf("Foto", "${c.withPhoto}", "${c.withoutPhoto}"))
     }
+}
+
+/**
+ * Camilo — BQ-10: do complete establishments (pin + photo + entrance) get more arrivals and fewer
+ * "no encontré el local" reports than incomplete ones? The backend counts and divides; this only shows it.
+ */
+@Composable
+private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
+    val complete = snapshot.groups.complete
+    val incomplete = snapshot.groups.incomplete
+    val rows: List<Pair<String, (CompletenessGroup) -> String>> = listOf(
+        "Establecimientos" to { "${it.establishments}" },
+        "Aperturas de ubicación" to { "${it.locationOpens}" },
+        "Llegadas" to { "${it.arrivals}" },
+        "No encontré el local" to { "${it.notFoundReports}" },
+        "No lo encontraron" to { group -> group.notFoundShare?.let { "${(it * 100).roundToInt()} %" } ?: "—" },
+    )
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-10 · Referencias completas vs incompletas", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        Text(
+            "Todos los establecimientos · todas las plataformas · últimos ${snapshot.periodDays} días",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TableRow(listOf("", "Completos", "Incompletos"), header = true)
+        rows.forEach { (label, pick) -> TableRow(listOf(label, pick(complete), pick(incomplete))) }
+        Text(
+            "Completo = pin, foto y descripción de la entrada. \"No lo encontraron\" = reportes de no encontrado " +
+                "sobre el total de estudiantes que dijeron si llegaron o no. — = nadie ha respondido aún.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // Restaurants: what each of their places still lacks to move to the complete group.
+        snapshot.ownEstablishments.forEach { own ->
+            Text(
+                if (own.missing.isEmpty()) "${own.name}: tiene todas las referencias."
+                else "${own.name}: le falta ${own.missing.joinToString(", ") { missingLabel(it) }}.",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+private fun missingLabel(reference: String): String = when (reference) {
+    "pin" -> "el pin en el mapa"
+    "photo" -> "la foto"
+    "entrance" -> "la descripción de la entrada"
+    else -> reference
 }
 
 @Composable

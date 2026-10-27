@@ -2,6 +2,9 @@ package co.edu.uniandes.unieat.data.fake
 
 import android.util.Log
 import co.edu.uniandes.unieat.core.model.BatchResponse
+import co.edu.uniandes.unieat.core.model.CompletenessGroup
+import co.edu.uniandes.unieat.core.model.CompletenessGroups
+import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationCoverage
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.LocationReportCounts
@@ -41,6 +44,18 @@ class LoggingAnalyticsRepository : AnalyticsRepository {
             coverage = LocationCoverage(
                 establishments = 4, withCoordinates = 3, withoutCoordinates = 1,
                 withEntranceDescription = 2, withoutEntranceDescription = 2, withPhoto = 1, withoutPhoto = 3,
+            ),
+        )
+    }
+
+    /** Demo BQ-10 numbers shaped like the seed: six complete places, two incomplete. */
+    override suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot {
+        val scale = if (days >= 28) 4 else 1
+        return LocationCompletenessSnapshot(
+            periodDays = days,
+            groups = CompletenessGroups(
+                complete = CompletenessGroup(6, 18 * scale, 9 * scale, 1 * scale, 0.1),
+                incomplete = CompletenessGroup(2, 7 * scale, 2 * scale, 3 * scale, 0.6),
             ),
         )
     }

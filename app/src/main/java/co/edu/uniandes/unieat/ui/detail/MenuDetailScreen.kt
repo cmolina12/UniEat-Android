@@ -119,6 +119,7 @@ fun MenuDetailScreen(
             onArrivalAnswered = viewModel::onArrivalAnswered,
             onReportLocation = { openReport(ReportKind.LOCATION) },
             onOpenMaps = viewModel::onOpenMaps,
+            onReportNotFound = { openReport(ReportKind.NOT_FOUND) },
         ),
         onReport = { openReport(ReportKind.UNAVAILABLE) },
         isDemo = viewModel.isDemo,

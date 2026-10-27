@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +65,7 @@ private val choices: List<Triple<ReportKind, String, ImageVector>> = listOf(
     Triple(ReportKind.PRICE, "Precio distinto al publicado", Icons.Filled.ShoppingCart),
     Triple(ReportKind.LONG_LINE, "Fila mucho más larga", Icons.Filled.Person),
     Triple(ReportKind.LOCATION, "Ubicación difícil de encontrar", Icons.Filled.Place),
+    Triple(ReportKind.NOT_FOUND, "No encontré el local", Icons.Filled.Search),
     Triple(ReportKind.ACCURATE, "El menú sigue correcto", Icons.Filled.ThumbUp),
     Triple(ReportKind.ARRIVAL, "Llegué al local", Icons.Filled.Done),
 )
