@@ -7,8 +7,11 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.local.InMemoryReportDao
+import co.edu.uniandes.unieat.data.local.ReportQueue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -166,6 +169,28 @@ class MenuDetailReportTest {
 
         assertEquals(1, tracker.events.count { it.kind == EventKind.ARRIVAL })
         assertEquals(ArrivalAnswer.CONFIRMED, vm.arrival.value)
+    }
+
+    @Test
+    fun offlineWithTheQueueSavesTheReportInsteadOfLosingIt() = runTest(dispatcher) {
+        val dao = InMemoryReportDao()
+        var schedules = 0
+        val queue = ReportQueue(dao, reports, { schedules++ }, clock = { now }, io = dispatcher)
+        val vm = MenuDetailViewModel("m", repository, StubLocation(), tracker, reports, reportQueue = queue) { now }
+        backgroundScope.launch { vm.queuedReports.collect {} }
+        advanceUntilIdle()
+        reports.result = { throw ApiException.offline() }
+
+        vm.submitReport(ReportKind.NOT_FOUND, "  No vi el letrero  ", null)
+        advanceUntilIdle()
+
+        assertTrue(vm.report.value is ReportSubmission.Queued)
+        val saved = dao.rows.value.single()
+        assertEquals(ReportKind.NOT_FOUND, saved.kind)
+        assertEquals(2, saved.version)
+        assertEquals("No vi el letrero", saved.note)
+        assertEquals(1, schedules)
+        assertEquals("the detail shows it as waiting", 1, vm.queuedReports.value)
     }
 
     @Test

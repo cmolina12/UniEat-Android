@@ -10,5 +10,7 @@ class UniEatApplication : Application() {
         container.flushScheduler.schedule()
         // Same for BQ-01 load records, including loads abandoned before the app was closed.
         container.feedLoadScheduler.schedule()
+        // Reports saved without internet in a previous session.
+        container.reportScheduler.schedule()
     }
 }

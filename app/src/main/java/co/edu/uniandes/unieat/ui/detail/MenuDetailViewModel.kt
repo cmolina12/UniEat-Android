@@ -22,6 +22,7 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
+import co.edu.uniandes.unieat.data.local.ReportQueue
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
@@ -74,6 +75,9 @@ sealed interface ReportSubmission {
     data object Sending : ReportSubmission
     data class Sent(val message: String, val pending: Boolean) : ReportSubmission
     data class Failed(val message: String) : ReportSubmission
+
+    /** No internet: the report waits in the local database and is sent when the connection comes back. */
+    data class Queued(val message: String) : ReportSubmission
 }
 
 enum class LocationPermission { PRECISE, APPROXIMATE, NONE }
@@ -123,6 +127,8 @@ class MenuDetailViewModel(
     private val feedCache: FeedCache? = null,
     /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
     online: Flow<Boolean>? = null,
+    /** Offline reports (Room). Without it, a report made offline is lost and the student is told so. */
+    private val reportQueue: ReportQueue? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -149,6 +155,10 @@ class MenuDetailViewModel(
 
     private val _report = MutableStateFlow<ReportSubmission>(ReportSubmission.Idle)
     val report: StateFlow<ReportSubmission> = _report.asStateFlow()
+
+    /** Reports of this menu still waiting for a connection; Room's Flow updates it when the worker sends them. */
+    val queuedReports: StateFlow<Int> = (reportQueue?.pendingFor(menuId) ?: flowOf(0))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private var openTracked = false
 
@@ -242,26 +252,34 @@ class MenuDetailViewModel(
         val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
         if (_report.value is ReportSubmission.Sending) return
         _report.value = ReportSubmission.Sending
+        val body = ReportBody(
+            publicationId = menu.id,
+            version = menu.version,
+            kind = kind,
+            note = note.trim().ifEmpty { null },
+            observedWaitMinutes = observedWaitMinutes.takeIf { kind == ReportKind.LONG_LINE },
+        )
+        // Main: the coroutine starts here and every _report update happens here, so the sheet redraws safely.
         viewModelScope.launch {
             _report.value = try {
-                val response = reportRepository.submit(
-                    ReportBody(
-                        publicationId = menu.id,
-                        version = menu.version,
-                        kind = kind,
-                        note = note.trim().ifEmpty { null },
-                        observedWaitMinutes = observedWaitMinutes.takeIf { kind == ReportKind.LONG_LINE },
-                    ),
-                )
+                val response = reportRepository.submit(body)
                 if (kind == ReportKind.ARRIVAL) recordArrival("report_sheet")
                 val pending = response.status == "pending"
                 if (pending) refreshQuietly()
                 ReportSubmission.Sent(response.message.ifBlank { "Gracias. Tu reporte quedó registrado." }, pending)
             } catch (e: ApiException) {
-                ReportSubmission.Failed(
-                    if (e.code == ApiException.OFFLINE) "Sin conexión: tu reporte no se envió. Inténtalo de nuevo cuando tengas señal."
-                    else e.error.message,
-                )
+                val queue = reportQueue
+                if (e.code == ApiException.OFFLINE && queue != null) {
+                    // IO: ReportQueue.enqueue writes the row to Room on Dispatchers.IO, then we are back on Main.
+                    queue.enqueue(body)
+                    if (kind == ReportKind.ARRIVAL) recordArrival("report_sheet")
+                    ReportSubmission.Queued("Sin conexión: guardamos tu reporte y lo enviaremos solo cuando vuelva la señal.")
+                } else {
+                    ReportSubmission.Failed(
+                        if (e.code == ApiException.OFFLINE) "Sin conexión: tu reporte no se envió. Inténtalo de nuevo cuando tengas señal."
+                        else e.error.message,
+                    )
+                }
             }
         }
     }
@@ -338,6 +356,7 @@ class MenuDetailViewModel(
                     },
                     feedCache = app.container.feedCache,
                     online = app.container.connectivity.online,
+                    reportQueue = app.container.reportQueue,
                 )
             }
         }
