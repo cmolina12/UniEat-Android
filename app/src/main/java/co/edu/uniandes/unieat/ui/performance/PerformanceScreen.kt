@@ -256,8 +256,9 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
             "Todos los establecimientos · todas las plataformas · últimos ${snapshot.periodDays} días",
             style = MaterialTheme.typography.bodySmall,
         )
-        TableRow(listOf("", "Completos", "Incompletos"), header = true)
-        rows.forEach { (label, pick) -> TableRow(listOf(label, pick(complete), pick(incomplete))) }
+        // Two value columns instead of BQ-05's three: they get more room so the long headers fit.
+        TableRow(listOf("", "Completos", "Incompletos"), header = true, labelWeight = BQ10_LABEL_WEIGHT)
+        rows.forEach { (label, pick) -> TableRow(listOf(label, pick(complete), pick(incomplete)), labelWeight = BQ10_LABEL_WEIGHT) }
         Text(
             "Completo = pin, foto y descripción de la entrada. \"No lo encontraron\" = reportes de no encontrado " +
                 "sobre el total de estudiantes que dijeron si llegaron o no. — = nadie ha respondido aún.",
@@ -278,6 +279,8 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
     }
 }
 
+private const val BQ10_LABEL_WEIGHT = 1.4f
+
 private fun missingLabel(reference: String): String = when (reference) {
     "pin" -> "el pin en el mapa"
     "photo" -> "la foto"
@@ -286,12 +289,13 @@ private fun missingLabel(reference: String): String = when (reference) {
 }
 
 @Composable
-private fun TableRow(cells: List<String>, header: Boolean = false) {
+private fun TableRow(cells: List<String>, header: Boolean = false, labelWeight: Float = 2.2f) {
     Row(Modifier.fillMaxWidth()) {
         cells.forEachIndexed { i, cell ->
             Text(
                 cell,
-                modifier = Modifier.weight(if (i == 0) 2.2f else 1f),
+                // The gap keeps right-aligned headers like "Completos" and "Incompletos" from touching.
+                modifier = Modifier.weight(if (i == 0) labelWeight else 1f).padding(start = if (i == 0) 0.dp else 6.dp),
                 textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (header) FontWeight.Bold else FontWeight.Normal,
