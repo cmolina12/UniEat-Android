@@ -108,6 +108,15 @@ fun LocationCard(
             )
 
             Text(
+                "¿Fuiste y no encontraste el local? Avísanos",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                textDecoration = TextDecoration.Underline,
+                color = Palette.Ink,
+                modifier = Modifier.clickable(onClick = actions.onReportNotFound),
+            )
+
+            Text(
                 "Actualizado ${SpanishPresentation.relative(guidance.updatedAt, now)}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -3,6 +3,7 @@ package co.edu.uniandes.unieat.data.analytics
 import co.edu.uniandes.unieat.core.model.AdminDashboardResponse
 import co.edu.uniandes.unieat.core.model.BatchResponse
 import co.edu.uniandes.unieat.core.model.EventBatch
+import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.RemoteEvent
@@ -21,6 +22,9 @@ interface AnalyticsRepository {
     suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = null
 
     suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot? = null
+
+    /** BQ-10: same endpoint for admins and restaurants; the backend decides what each one gets. */
+    suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot? = null
 }
 
 class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepository {
@@ -38,6 +42,9 @@ class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepositor
 
     override suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot =
         api.get("restaurant/location-guidance", mapOf("days" to days))
+
+    override suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot =
+        api.get("location-completeness", mapOf("days" to days))
 
     private companion object {
         const val ALL_PLATFORMS = "all"

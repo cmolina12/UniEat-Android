@@ -44,6 +44,8 @@ data class LocationActions(
     val onArrivalAnswered: (arrived: Boolean) -> Unit,
     val onReportLocation: () -> Unit,
     val onOpenMaps: (source: String) -> Unit,
+    /** BQ-10: opens the report sheet on "No encontré el local". */
+    val onReportNotFound: () -> Unit = {},
 )
 
 /** Beyond this the walking estimate is meaningless: the user is not around campus. */
