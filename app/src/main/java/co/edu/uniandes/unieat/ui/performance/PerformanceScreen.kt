@@ -35,6 +35,7 @@ import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.SCOPE_THIS_DEVICE
+import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.feed.FeedStatusCard
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
@@ -116,6 +117,9 @@ private fun PerformanceContent(
                 body = state.message,
             ) { SolidButton("Reintentar", onClick = onRetry, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
             is PerformanceUiState.Content -> {
+                state.savedAt?.let {
+                    DemoNotice("Sin conexión · datos guardados a las ${SpanishPresentation.time(it)} · se actualizan al volver la señal")
+                }
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
                 FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
