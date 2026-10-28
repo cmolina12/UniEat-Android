@@ -112,6 +112,14 @@ fun PublishScreen(vm: PublishViewModel, onSessionExpired: () -> Unit) {
                     .padding(12.dp),
             )
         }
+        val missing = state.form.missing(now)
+        if (missing.isNotEmpty() && !state.loading) {
+            Text(
+                "Para publicar falta: " + missing.joinToString(", ") + ".",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         SolidButton(
             title = when {
                 state.saving -> "Guardando…"
@@ -123,6 +131,11 @@ fun PublishScreen(vm: PublishViewModel, onSessionExpired: () -> Unit) {
             color = Palette.Coral,
             enabled = state.form.isValid(now) && !state.saving && !state.offline,
         )
+        if (state.editing != null || state.form.hasInput) {
+            OutlinedButton(onClick = vm::discardDraft, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
+                Text(if (state.editing != null) "Cancelar edición" else "Descartar borrador", color = Palette.Ink)
+            }
+        }
         MyMenus(state.myMenus, now, canClose = !state.offline, onEdit = vm::edit, onClose = vm::close)
     }
 }

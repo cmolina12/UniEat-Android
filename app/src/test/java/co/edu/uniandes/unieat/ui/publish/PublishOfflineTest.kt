@@ -162,6 +162,54 @@ class PublishOfflineTest {
         assertNull(store.files[PublishViewModel.DRAFT_KEY]) // published: the draft is gone
     }
 
+    @Test
+    fun theScreenSaysWhatIsMissingToPublish() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        val key = vm.state.value.form.dishes.single().key
+        vm.updateDish(key) { it.copy(name = "Sopa") }
+
+        assertEquals(listOf("el precio del plato"), vm.state.value.form.missing(now))
+
+        vm.updateDish(key) { it.copy(priceText = "15000") }
+        assertEquals(emptyList<String>(), vm.state.value.form.missing(now))
+    }
+
+    @Test
+    fun cancellingAnEditLeavesEditModeForGood() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.edit(vm.state.value.myMenus.single())
+        advanceUntilIdle()
+        assertNotNull(store.files[PublishViewModel.DRAFT_KEY])
+
+        vm.discardDraft()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.editing)
+        assertEquals("Edición cancelada. El menú publicado no cambió.", vm.state.value.message)
+        assertEquals("e1", vm.state.value.form.establishmentId) // a new menu for the first establishment
+        assertNull(store.files[PublishViewModel.DRAFT_KEY])
+        val reopened = viewModel()
+        advanceUntilIdle()
+        assertNull(reopened.state.value.editing) // it does not come back after closing the app
+    }
+
+    @Test
+    fun discardingANewDraftEmptiesTheDishes() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        fillOneDish(vm)
+        advanceUntilIdle()
+
+        vm.discardDraft()
+        advanceUntilIdle()
+
+        assertEquals("", vm.state.value.form.dishes.single().name)
+        assertEquals("Borrador descartado.", vm.state.value.message)
+        assertNull(store.files[PublishViewModel.DRAFT_KEY])
+    }
+
     private fun viewModel(online: Flow<Boolean> = emptyFlow()) =
         PublishViewModel(server, OfflineEstablishments(server), { now }, store, online)
 
