@@ -17,6 +17,7 @@ import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import androidx.collection.SparseArrayCompat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import co.edu.uniandes.unieat.data.local.PerformancePreferences
 import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
@@ -91,6 +92,9 @@ class PerformanceViewModel(
      */
     private val byPeriod = SparseArrayCompat<PerformanceUiState.Content>(PERIODS)
 
+    /** The request in flight. A new period cancels it, so a slow old answer can never overwrite the new one. */
+    private var loadJob: Job? = null
+
     init {
         viewModelScope.launch {
             // The saved period is read before the first request, so the dashboard opens as the user left it.
@@ -117,12 +121,13 @@ class PerformanceViewModel(
     fun load() {
         val days = _days.value
         _state.value = byPeriod[days] ?: PerformanceUiState.Loading
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.value = try {
                 val restaurant = role == ROLE_RESTAURANT
                 val content = withContext(io) {
                     val summary = async { if (restaurant) repository.restaurantPerformance(days) else repository.performance(days) }
-                    val feedLoad = async { feedLoadReport() }
+                    val feedLoad = async { if (role == ROLE_ADMIN) feedLoadReport() else null }
                     val guidance = async { locationGuidance(days, restaurant) }
                     val completeness = async { locationCompleteness(days) }
                     // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
@@ -167,7 +172,11 @@ class PerformanceViewModel(
 
     private val roleKey: String get() = role ?: "none"
 
-    /** BQ-01 always looks at the last seven days, whatever period the other metrics use. */
+    /**
+     * BQ-01 always looks at the last seven days, whatever period the other metrics use. Only admins ask
+     * for it: the endpoint is admin-only, and a restaurant would get this phone's empty local summary
+     * ("no loads") instead of a real answer.
+     */
     private suspend fun feedLoadReport(): FeedLoadReport? =
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
