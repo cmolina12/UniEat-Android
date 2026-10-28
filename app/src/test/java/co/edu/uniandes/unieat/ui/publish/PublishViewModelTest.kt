@@ -160,7 +160,7 @@ class PublishViewModelTest {
     }
 
     private fun viewModel(menus: StubMenus, establishments: List<OwnEstablishment>) =
-        PublishViewModel(menus, StubEstablishments(establishments)) { now }
+        PublishViewModel(menus, StubEstablishments(establishments), clock = { now })
 
     private fun fillOneDish(vm: PublishViewModel) {
         val key = vm.state.value.form.dishes.single().key

@@ -5,20 +5,32 @@ import androidx.lifecycle.viewModelScope
 import co.edu.uniandes.unieat.core.decision.Coordinate
 import co.edu.uniandes.unieat.core.model.EstablishmentMembership
 import co.edu.uniandes.unieat.core.model.EstablishmentRequestBody
+import co.edu.uniandes.unieat.core.model.MeResponse
+import co.edu.uniandes.unieat.data.local.OfflineStore
 import co.edu.uniandes.unieat.data.location.AddressGeocoder
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.EstablishmentRepository
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 import java.net.URI
+import java.time.Instant
 
+@Serializable
 data class EstablishmentRequestForm(
     val name: String = "",
     val area: String = "Centro",
@@ -34,6 +46,10 @@ data class EstablishmentRequestForm(
 
     val canSubmit: Boolean
         get() = name.isNotBlank() && address.isNotBlank() && paymentMethods.isNotEmpty() && photoUrlValid
+
+    /** Something the owner typed or placed: only then is the request kept as a draft. */
+    val hasInput: Boolean
+        get() = listOf(name, address, entranceDescription, photoUrl).any { it.isNotBlank() } || pin != null
 }
 
 data class EstablishmentsUiState(
@@ -46,6 +62,10 @@ data class EstablishmentsUiState(
     val locating: Boolean = false,
     val pinMessage: String? = null,
     val message: String? = null,
+    /** No validated connection: sending the request and searching an address wait for the signal. */
+    val offline: Boolean = false,
+    /** Set when the establishments come from the copy saved at that time instead of the server. */
+    val savedAt: Instant? = null,
 )
 
 /**
@@ -53,18 +73,49 @@ data class EstablishmentsUiState(
  * establishment and a form to request a new one with its pin. [onAccountChanged] refreshes the
  * app's tabs after the account is reloaded (an approval turns a student into a restaurant).
  */
+@OptIn(FlowPreview::class)
 class EstablishmentsViewModel(
     private val profiles: ProfileRepository,
     private val establishments: EstablishmentRepository,
     private val location: LocationRepository,
     private val geocoder: AddressGeocoder,
     private val onAccountChanged: () -> Unit = {},
+    /** Saved establishments and the unsent request. null in demo mode. */
+    private val store: OfflineStore? = null,
+    /** Validated-connection changes: buttons turn off without signal and the state reloads when it returns. */
+    online: Flow<Boolean> = emptyFlow(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(EstablishmentsUiState())
     val state: StateFlow<EstablishmentsUiState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { reloadAccount() }
+        viewModelScope.launch {
+            restoreDraft()
+            reloadAccount()
+        }
+        viewModelScope.launch {
+            // The request form is written to disk half a second after the owner stops typing.
+            _state.map { it.form }
+                .distinctUntilChanged()
+                .drop(1)
+                .debounce(DRAFT_DELAY_MILLIS)
+                .collect { form ->
+                    if (form.hasInput) store?.save(DRAFT_KEY, EstablishmentRequestForm.serializer(), form)
+                    else store?.remove(DRAFT_KEY)
+                }
+        }
+        viewModelScope.launch {
+            online.collect { isOnline ->
+                val current = _state.value
+                _state.update { it.copy(offline = !isOnline) }
+                if (isOnline && (current.offline || current.savedAt != null)) reloadAccount()
+            }
+        }
+    }
+
+    private suspend fun restoreDraft() {
+        val draft = store?.load(DRAFT_KEY, EstablishmentRequestForm.serializer())?.value ?: return
+        _state.update { it.copy(form = draft, formOpen = true, message = "Recuperamos tu solicitud sin enviar.") }
     }
 
     /** "Actualizar estado": asks again whether an admin approved the requests. */
@@ -109,6 +160,11 @@ class EstablishmentsViewModel(
     fun findAddress() {
         val address = _state.value.form.address
         if (address.isBlank() || _state.value.geocoding) return
+        if (_state.value.offline) {
+            // The address search uses Google's servers; the GPS and the map pin work without signal.
+            _state.update { it.copy(pinMessage = GEOCODE_OFFLINE_MESSAGE) }
+            return
+        }
         _state.update { it.copy(geocoding = true) }
         viewModelScope.launch {
             val found = geocoder.find(address)
@@ -162,6 +218,7 @@ class EstablishmentsViewModel(
 
     fun submit() {
         val form = _state.value.form
+        if (_state.value.offline) return _state.update { it.copy(message = SUBMIT_OFFLINE_MESSAGE) }
         if (!form.canSubmit || _state.value.working) return
         _state.update { it.copy(working = true) }
         viewModelScope.launch {
@@ -179,6 +236,7 @@ class EstablishmentsViewModel(
             )
             try {
                 establishments.request(body)
+                store?.remove(DRAFT_KEY)
                 // The request already exists: if reloading fails it must not look like the send failed.
                 reloadAccount()
                 _state.update {
@@ -191,18 +249,41 @@ class EstablishmentsViewModel(
                     )
                 }
             } catch (e: ApiException) {
-                _state.update { it.copy(working = false, message = e.error.message) }
+                // Network only: an admin approves what the server has, so the request is never queued.
+                val offline = e.code == ApiException.OFFLINE
+                _state.update {
+                    it.copy(
+                        working = false,
+                        offline = it.offline || offline,
+                        message = if (offline) SUBMIT_OFFLINE_MESSAGE else e.error.message,
+                    )
+                }
             }
         }
     }
 
-    /** GET /me: role and memberships. Returns false (with a message) when it fails. */
+    /**
+     * GET /me: role and memberships. Returns false when it fails. Without signal it shows the last
+     * copy saved (network falling back to cache) instead of a generic error.
+     */
     private suspend fun reloadAccount(): Boolean = try {
         val me = profiles.me()
-        _state.update { it.copy(memberships = me.establishments, role = me.role) }
+        store?.save(ACCOUNT_KEY, MeResponse.serializer(), me)
+        _state.update { it.copy(memberships = me.establishments, role = me.role, savedAt = null) }
         true
     } catch (e: ApiException) {
-        _state.update { it.copy(message = e.error.message) }
+        if (e.code == ApiException.OFFLINE) {
+            val saved = store?.load(ACCOUNT_KEY, MeResponse.serializer())
+            _state.update {
+                if (saved != null) {
+                    it.copy(memberships = saved.value.establishments, role = saved.value.role, savedAt = saved.savedAt, offline = true)
+                } else {
+                    it.copy(offline = true, message = NO_SAVED_DATA_MESSAGE)
+                }
+            }
+        } else {
+            _state.update { it.copy(message = e.error.message) }
+        }
         false
     }
 
@@ -210,6 +291,15 @@ class EstablishmentsViewModel(
         val AREAS = listOf("Centro", "Norte", "Sur", "Fuera del campus")
         val PAYMENT_METHODS = listOf("Nequi", "Daviplata", "Efectivo", "Tarjeta")
         private const val LOCATION_TIMEOUT_MILLIS = 15_000L
+        const val DRAFT_DELAY_MILLIS = 500L
+        const val ACCOUNT_KEY = "establishments-account"
+        const val DRAFT_KEY = "establishment-request-draft"
+        const val NO_SAVED_DATA_MESSAGE =
+            "Sin conexión: el estado de tus establecimientos se cargará solo al volver la señal."
+        const val SUBMIT_OFFLINE_MESSAGE =
+            "Sin conexión: tu solicitud quedó guardada como borrador. Envíala cuando vuelva la señal."
+        const val GEOCODE_OFFLINE_MESSAGE =
+            "Sin conexión no podemos buscar la dirección. Usa tu ubicación (el GPS funciona sin señal) o toca el mapa."
     }
 }
 

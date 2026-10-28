@@ -3,10 +3,13 @@ package co.edu.uniandes.unieat.core.decision
 import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.MenuReport
 import co.edu.uniandes.unieat.core.model.ReportKind
+import kotlinx.serialization.Serializable
 import java.time.Instant
 
 enum class LocationReference { PIN, PHOTO, ADDRESS, ENTRANCE }
 
+/** Serializable so an unsent establishment request keeps its pin as a draft. */
+@Serializable
 data class Coordinate(val latitude: Double, val longitude: Double)
 
 data class LocationGuidance(

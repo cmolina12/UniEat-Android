@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -37,7 +39,8 @@ class PerformanceStorageTest {
     @Test
     fun theChosenPeriodIsWrittenToDisk() = runBlocking {
         preferences().setDays(28)
-        scope.cancel() // closes the first DataStore, like closing the app
+        // Closes the first DataStore, like closing the app, and waits until it lets go of the file.
+        scope.coroutineContext.job.cancelAndJoin()
 
         val reopened = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) {
             File(dir, "settings.preferences_pb")
