@@ -76,6 +76,36 @@ class PerformanceViewModelTest {
     }
 
     @Test
+    fun switchingBackToAPeriodShowsItsNumbersAtOnceThenRefreshes() = runTest(dispatcher) {
+        var sevenDayCalls = 0
+        val vm = viewModelFor(StubAnalytics { days ->
+            if (days == 7) sevenDayCalls++
+            // The second time, the 7-day numbers grew: new events arrived meanwhile.
+            summary(days).copy(impressions = if (days == 7 && sevenDayCalls > 1) 50 else 48)
+        })
+        advanceUntilIdle()
+        vm.selectDays(28)
+        advanceUntilIdle()
+
+        vm.selectDays(7)
+        // Before the request runs: the 7-day result kept in the SparseArray, not a spinner.
+        assertEquals(48, (vm.state.value as PerformanceUiState.Content).summary.impressions)
+
+        advanceUntilIdle()
+        assertEquals(50, (vm.state.value as PerformanceUiState.Content).summary.impressions)
+    }
+
+    @Test
+    fun aPeriodNeverLoadedStillShowsLoading() = runTest(dispatcher) {
+        val vm = viewModelFor(StubAnalytics { days -> summary(days) })
+        advanceUntilIdle()
+
+        vm.selectDays(28)
+
+        assertEquals(PerformanceUiState.Loading, vm.state.value)
+    }
+
+    @Test
     fun forbiddenBecomesRestricted() = runTest(dispatcher) {
         val vm = viewModelFor(StubAnalytics {
             throw ApiException(ApiError(ApiException.FORBIDDEN, "Solo para restaurantes."), 403)

@@ -20,6 +20,7 @@ import co.edu.uniandes.unieat.core.model.MenuReport
 import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.analytics.EventKind
+import co.edu.uniandes.unieat.data.cache.MenuDetailCache
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.local.ReportQueue
@@ -129,6 +130,8 @@ class MenuDetailViewModel(
     online: Flow<Boolean>? = null,
     /** Offline reports (Room). Without it, a report made offline is lost and the student is told so. */
     private val reportQueue: ReportQueue? = null,
+    /** Details opened recently (LruCache in memory): a menu opened again shows at once. */
+    private val memoryCache: MenuDetailCache? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -176,18 +179,32 @@ class MenuDetailViewModel(
         }
     }
 
+    /**
+     * Cache then network: a detail still in the LruCache is shown at once, without a spinner, and the
+     * request then replaces it with the server's current version (and refreshes the cache).
+     */
     fun load() {
-        _state.value = MenuDetailUiState.Loading
+        val cached = memoryCache?.get(menuId)
+        _state.value = cached?.let {
+            trackOpen(it.response.menu)
+            it.toContent()
+        } ?: MenuDetailUiState.Loading
         viewModelScope.launch {
             _state.value = try {
                 val response = repository.menu(menuId)
+                memoryCache?.put(menuId, response)
                 trackOpen(response.menu)
                 response.toContent()
             } catch (e: ApiException) {
                 when (e.code) {
-                    ApiException.GONE -> MenuDetailUiState.Gone(e.error.message)
+                    ApiException.GONE -> {
+                        // Closed or expired on the server: the cached copy must not come back.
+                        memoryCache?.remove(menuId)
+                        MenuDetailUiState.Gone(e.error.message)
+                    }
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
-                    ApiException.OFFLINE -> feedCache?.findMenu(menuId)?.let { saved ->
+                    // Offline, the cached detail (with its reports) beats the feed's copy; it says how old it is.
+                    ApiException.OFFLINE -> cached?.toContent(saved = true) ?: feedCache?.findMenu(menuId)?.let { saved ->
                         trackOpen(saved.menu)
                         MenuDetailUiState.Content(
                             saved.menu,
@@ -203,6 +220,14 @@ class MenuDetailViewModel(
 
     private fun MenuDetailResponse.toContent() =
         MenuDetailUiState.Content(menu, Duration.between(deviceClock(), serverNow), reports = reports)
+
+    /** The server clock is estimated from when the copy arrived, as with the saved feed. */
+    private fun MenuDetailCache.Entry.toContent(saved: Boolean = false) = MenuDetailUiState.Content(
+        response.menu,
+        clockOffset = savedClockOffset(receivedAt, response.serverNow, deviceClock()),
+        savedAt = receivedAt.takeIf { saved },
+        reports = response.reports,
+    )
 
     private fun trackOpen(menu: DailyMenu) {
         if (openTracked) return
@@ -286,7 +311,9 @@ class MenuDetailViewModel(
 
     private suspend fun refreshQuietly() {
         try {
-            _state.value = repository.menu(menuId, automatic = true).toContent()
+            val response = repository.menu(menuId, automatic = true)
+            memoryCache?.put(menuId, response)
+            _state.value = response.toContent()
         } catch (_: ApiException) {
         }
     }
@@ -357,6 +384,7 @@ class MenuDetailViewModel(
                     feedCache = app.container.feedCache,
                     online = app.container.connectivity.online,
                     reportQueue = app.container.reportQueue,
+                    memoryCache = app.container.menuDetailCache,
                 )
             }
         }

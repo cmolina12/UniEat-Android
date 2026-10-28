@@ -73,6 +73,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.play.services.location)
     implementation(libs.androidx.work.runtime.ktx)
+    // LruCache and SparseArrayCompat (same structures as android.util, but they also run in unit tests)
+    implementation(libs.androidx.collection.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

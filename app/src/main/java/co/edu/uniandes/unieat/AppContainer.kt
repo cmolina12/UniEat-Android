@@ -4,6 +4,7 @@ import android.content.Context
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
+import co.edu.uniandes.unieat.data.cache.MenuDetailCache
 import co.edu.uniandes.unieat.data.auth.AuthState
 import co.edu.uniandes.unieat.data.auth.SessionManager
 import co.edu.uniandes.unieat.data.auth.SessionStore
@@ -104,6 +105,9 @@ class AppContainer(
 
     val connectivity: ConnectivityMonitor by lazy { ConnectivityMonitor(context) }
 
+    /** Menu details opened recently, in memory (LruCache of 20). */
+    val menuDetailCache = MenuDetailCache()
+
     /** Offline copy of the feed. Demo mode has no network, so it does not need one. */
     val feedCache: FeedCache? by lazy {
         if (usesFakeData) null else FileFeedCache(File(context.filesDir, "feed-cache"))
@@ -169,6 +173,7 @@ class AppContainer(
         appScope.launch {
             sessionManager.state.filterIsInstance<AuthState.SignedOut>().collect {
                 feedCache?.clear()
+                menuDetailCache.clear()
                 // Waiting reports would otherwise be sent with the next account's session.
                 reportQueue.clear()
                 performanceSnapshots.clear()

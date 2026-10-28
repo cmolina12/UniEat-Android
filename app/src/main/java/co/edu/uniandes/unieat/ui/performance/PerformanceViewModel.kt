@@ -14,6 +14,7 @@ import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
+import androidx.collection.SparseArrayCompat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -78,6 +79,18 @@ class PerformanceViewModel(
     private val _days = MutableStateFlow(7)
     val days: StateFlow<Int> = _days.asStateFlow()
 
+    /**
+     * Last result of each period in memory, keyed by the number of days (7 or 28). Switching back to a
+     * period shows its numbers at once while the fresh ones load (cache then network).
+     *
+     * SparseArrayCompat maps int keys to objects with two plain arrays: a sorted int[] of keys (found by
+     * binary search) and an Object[] of values at the same index. Unlike HashMap<Int, …> it never boxes
+     * the key into an Integer object and needs no entry objects, so it uses less memory; binary search is
+     * O(log n) instead of O(1), which does not matter for 2 keys (it is meant for collections < 1000).
+     * Initial capacity 2: exactly the two periods the backend supports, so it never has to grow.
+     */
+    private val byPeriod = SparseArrayCompat<PerformanceUiState.Content>(PERIODS)
+
     init {
         viewModelScope.launch {
             // The saved period is read before the first request, so the dashboard opens as the user left it.
@@ -102,11 +115,11 @@ class PerformanceViewModel(
      * published back on Main.
      */
     fun load() {
-        _state.value = PerformanceUiState.Loading
+        val days = _days.value
+        _state.value = byPeriod[days] ?: PerformanceUiState.Loading
         viewModelScope.launch {
             _state.value = try {
                 val restaurant = role == ROLE_RESTAURANT
-                val days = _days.value
                 val content = withContext(io) {
                     val summary = async { if (restaurant) repository.restaurantPerformance(days) else repository.performance(days) }
                     val feedLoad = async { feedLoadReport() }
@@ -115,13 +128,14 @@ class PerformanceViewModel(
                     // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
                     PerformanceUiState.Content(summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await())
                 }
+                byPeriod.put(days, content)
                 save(content, days)
                 content
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
                     ApiException.AUTH_REQUIRED -> PerformanceUiState.SessionExpired
-                    ApiException.OFFLINE -> savedCopy(_days.value) ?: PerformanceUiState.Error(e.error.message, e.code)
+                    ApiException.OFFLINE -> savedCopy(days) ?: PerformanceUiState.Error(e.error.message, e.code)
                     else -> PerformanceUiState.Error(e.error.message, e.code)
                 }
             }
@@ -180,6 +194,8 @@ class PerformanceViewModel(
 
     companion object {
         private const val BQ01_DAYS = 7
+        // 7 and 28 days
+        private const val PERIODS = 2
         private const val ROLE_RESTAURANT = "restaurant"
         private const val ROLE_ADMIN = "admin"
 
