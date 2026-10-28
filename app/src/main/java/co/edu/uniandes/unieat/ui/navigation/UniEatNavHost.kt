@@ -72,6 +72,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 container.profileRepository,
                 container.usesFakeData,
                 online = container.connectivity.online,
+                cache = container.profileCache,
             )
         },
     )

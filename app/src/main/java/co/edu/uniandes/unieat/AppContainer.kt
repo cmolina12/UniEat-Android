@@ -16,9 +16,11 @@ import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.local.DataStorePerformancePreferences
+import co.edu.uniandes.unieat.data.local.DataStoreProfileCache
 import co.edu.uniandes.unieat.data.local.FilePerformanceSnapshots
 import co.edu.uniandes.unieat.data.local.PerformancePreferences
 import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
+import co.edu.uniandes.unieat.data.local.ProfileCache
 import co.edu.uniandes.unieat.data.local.ReportQueue
 import co.edu.uniandes.unieat.data.local.settingsDataStore
 import co.edu.uniandes.unieat.data.local.UniEatDatabase
@@ -73,6 +75,11 @@ class AppContainer(
     val apiClient: ApiClient by lazy { ApiClient(config, tokenProvider) }
     val profileRepository: ProfileRepository by lazy {
         if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
+    }
+
+    /** DataStore "unieat_settings": last GET /me, so the role (and tabs) survive opening offline. */
+    val profileCache: ProfileCache? by lazy {
+        if (usesFakeData) null else DataStoreProfileCache(context.settingsDataStore)
     }
 
     val establishmentRepository: EstablishmentRepository by lazy {
@@ -158,6 +165,7 @@ class AppContainer(
                 // Waiting reports would otherwise be sent with the next account's session.
                 reportQueue.clear()
                 performanceSnapshots.clear()
+                profileCache?.clear()
             }
         }
     }
