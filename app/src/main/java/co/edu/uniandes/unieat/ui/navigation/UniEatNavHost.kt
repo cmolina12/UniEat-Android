@@ -164,7 +164,12 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 )
             }
             composable<Profile> {
-                val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(container.profileRepository, container.sessionManager) })
+                val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(
+                            container.profileRepository,
+                            container.sessionManager,
+                            container.profileCache,
+                            container.connectivity.online,
+                        ) })
                 ProfileScreen(
                     vm = vm,
                     onSignedOut = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
