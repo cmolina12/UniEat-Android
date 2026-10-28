@@ -15,7 +15,12 @@ import co.edu.uniandes.unieat.data.analytics.FlushScheduler
 import co.edu.uniandes.unieat.data.analytics.QueuedEventTracker
 import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
+import co.edu.uniandes.unieat.data.local.DataStorePerformancePreferences
+import co.edu.uniandes.unieat.data.local.FilePerformanceSnapshots
+import co.edu.uniandes.unieat.data.local.PerformancePreferences
+import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
 import co.edu.uniandes.unieat.data.local.ReportQueue
+import co.edu.uniandes.unieat.data.local.settingsDataStore
 import co.edu.uniandes.unieat.data.local.UniEatDatabase
 import co.edu.uniandes.unieat.data.local.WorkManagerReportScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
@@ -123,6 +128,12 @@ class AppContainer(
 
     val reportScheduler: FlushScheduler by lazy { WorkManagerReportScheduler(context) }
 
+    /** DataStore "unieat_settings": the Rendimiento period. */
+    val performancePreferences: PerformancePreferences by lazy { DataStorePerformancePreferences(context.settingsDataStore) }
+
+    /** Last Rendimiento result per role and period, for offline. */
+    val performanceSnapshots: PerformanceSnapshots by lazy { FilePerformanceSnapshots(File(context.filesDir, "performance")) }
+
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
 
     val analyticsRepository: AnalyticsRepository by lazy {
@@ -146,6 +157,7 @@ class AppContainer(
                 feedCache?.clear()
                 // Waiting reports would otherwise be sent with the next account's session.
                 reportQueue.clear()
+                performanceSnapshots.clear()
             }
         }
     }

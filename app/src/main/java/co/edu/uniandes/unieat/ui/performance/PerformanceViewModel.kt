@@ -17,11 +17,17 @@ import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import co.edu.uniandes.unieat.data.local.PerformancePreferences
+import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
+import co.edu.uniandes.unieat.data.local.SavedPerformance
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
 
 /** What the dashboard can show. One state at a time, so the UI is a simple `when`. */
 sealed interface PerformanceUiState {
@@ -33,6 +39,8 @@ sealed interface PerformanceUiState {
         val ownEstablishmentsOnly: Boolean = false,
         val locationGuidance: LocationGuidanceSnapshot? = null,
         val locationCompleteness: LocationCompletenessSnapshot? = null,
+        /** Set when the device is offline and this is the last result saved on the phone. */
+        val savedAt: Instant? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -55,6 +63,13 @@ class PerformanceViewModel(
     private val showLocationGuidance: Boolean = false,
     /** Where the requests run. Tests pass their own dispatcher so they control the timing. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** DataStore: the 7/28-day choice survives closing the app. */
+    private val preferences: PerformancePreferences? = null,
+    /** Last result per role and period, for offline. */
+    private val snapshots: PerformanceSnapshots? = null,
+    /** Validated-connection changes; coming back online replaces the saved copy with fresh numbers. */
+    online: Flow<Boolean>? = null,
+    private val clock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
@@ -64,7 +79,20 @@ class PerformanceViewModel(
     val days: StateFlow<Int> = _days.asStateFlow()
 
     init {
-        load()
+        viewModelScope.launch {
+            // The saved period is read before the first request, so the dashboard opens as the user left it.
+            preferences?.let { _days.value = it.days.first() }
+            load()
+        }
+        if (online != null) viewModelScope.launch {
+            online.collect { isOnline ->
+                if (!isOnline) return@collect
+                val current = _state.value
+                val showingSaved = current is PerformanceUiState.Content && current.savedAt != null
+                val offlineError = current is PerformanceUiState.Error && current.code == ApiException.OFFLINE
+                if (showingSaved || offlineError) load()
+            }
+        }
     }
 
     /**
@@ -79,7 +107,7 @@ class PerformanceViewModel(
             _state.value = try {
                 val restaurant = role == ROLE_RESTAURANT
                 val days = _days.value
-                withContext(io) {
+                val content = withContext(io) {
                     val summary = async { if (restaurant) repository.restaurantPerformance(days) else repository.performance(days) }
                     val feedLoad = async { feedLoadReport() }
                     val guidance = async { locationGuidance(days, restaurant) }
@@ -87,15 +115,43 @@ class PerformanceViewModel(
                     // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
                     PerformanceUiState.Content(summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await())
                 }
+                save(content, days)
+                content
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.FORBIDDEN -> PerformanceUiState.Restricted(e.error.message)
                     ApiException.AUTH_REQUIRED -> PerformanceUiState.SessionExpired
+                    ApiException.OFFLINE -> savedCopy(_days.value) ?: PerformanceUiState.Error(e.error.message, e.code)
                     else -> PerformanceUiState.Error(e.error.message, e.code)
                 }
             }
         }
     }
+
+    /** Keeps this result for offline. A failed save is not worth an error on screen. */
+    private suspend fun save(content: PerformanceUiState.Content, days: Int) {
+        val store = snapshots ?: return
+        runCatching {
+            store.save(
+                SavedPerformance(
+                    role = roleKey, days = days, savedAt = clock(),
+                    summary = content.summary, feedLoadReport = content.feedLoadReport,
+                    ownEstablishmentsOnly = content.ownEstablishmentsOnly,
+                    locationGuidance = content.locationGuidance, locationCompleteness = content.locationCompleteness,
+                ),
+            )
+        }
+    }
+
+    private suspend fun savedCopy(days: Int): PerformanceUiState.Content? {
+        val saved = snapshots?.load(roleKey, days) ?: return null
+        return PerformanceUiState.Content(
+            saved.summary, saved.feedLoadReport, saved.ownEstablishmentsOnly,
+            saved.locationGuidance, saved.locationCompleteness, savedAt = saved.savedAt,
+        )
+    }
+
+    private val roleKey: String get() = role ?: "none"
 
     /** BQ-01 always looks at the last seven days, whatever period the other metrics use. */
     private suspend fun feedLoadReport(): FeedLoadReport? =
@@ -118,6 +174,7 @@ class PerformanceViewModel(
     fun selectDays(days: Int) {
         if (_days.value == days) return
         _days.value = days
+        preferences?.let { viewModelScope.launch { it.setDays(days) } }
         load()
     }
 
@@ -134,6 +191,9 @@ class PerformanceViewModel(
                     app.container.feedLoadRepository,
                     role = role,
                     showLocationGuidance = role == ROLE_ADMIN || role == ROLE_RESTAURANT || app.container.usesFakeData,
+                    preferences = app.container.performancePreferences,
+                    snapshots = app.container.performanceSnapshots,
+                    online = app.container.connectivity.online,
                 )
             }
         }

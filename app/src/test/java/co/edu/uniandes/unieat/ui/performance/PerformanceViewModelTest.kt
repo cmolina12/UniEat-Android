@@ -12,7 +12,12 @@ import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
+import co.edu.uniandes.unieat.data.local.PerformancePreferences
+import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
+import co.edu.uniandes.unieat.data.local.SavedPerformance
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -23,8 +28,10 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PerformanceViewModelTest {
@@ -213,11 +220,126 @@ class PerformanceViewModelTest {
         assertEquals(1_000L, currentTime)
     }
 
+    @Test
+    fun opensWithThePeriodSavedLastTime() = runTest(dispatcher) {
+        val seenDays = mutableListOf<Int>()
+        val vm = viewModelFor(StubAnalytics { seenDays += it; summary(it) }, preferences = MemoryPreferences(28))
+        advanceUntilIdle()
+
+        assertEquals(28, vm.days.value)
+        assertEquals("no request with the default 7 first", listOf(28), seenDays)
+    }
+
+    @Test
+    fun choosingAPeriodSavesIt() = runTest(dispatcher) {
+        val preferences = MemoryPreferences(7)
+        val vm = viewModelFor(StubAnalytics { summary(it) }, preferences = preferences)
+        advanceUntilIdle()
+
+        vm.selectDays(28)
+        advanceUntilIdle()
+
+        assertEquals(28, preferences.saved.value)
+    }
+
+    @Test
+    fun offlineShowsTheLastResultSavedForThatPeriod() = runTest(dispatcher) {
+        var offline = false
+        val snapshots = MemorySnapshots()
+        val analytics = StubAnalytics(onLocation = { guidance(it) }, onCompleteness = { completeness(it) }) {
+            if (offline) throw ApiException.offline() else summary(it)
+        }
+        val vm = viewModelFor(analytics, role = "admin", showLocationGuidance = true, snapshots = snapshots)
+        advanceUntilIdle()
+        assertNull((vm.state.value as PerformanceUiState.Content).savedAt)
+
+        offline = true
+        vm.load()
+        advanceUntilIdle()
+
+        val content = vm.state.value as PerformanceUiState.Content
+        assertEquals(now, content.savedAt)
+        assertEquals(summary(7), content.summary)
+        assertEquals(completeness(7), content.locationCompleteness)
+    }
+
+    @Test
+    fun offlineWithoutASavedCopyIsStillAnError() = runTest(dispatcher) {
+        val vm = viewModelFor(StubAnalytics { throw ApiException.offline() }, snapshots = MemorySnapshots())
+        advanceUntilIdle()
+
+        assertEquals(ApiException.OFFLINE, (vm.state.value as PerformanceUiState.Error).code)
+    }
+
+    @Test
+    fun aSavedCopyIsNeverShownToAnotherRole() = runTest(dispatcher) {
+        val snapshots = MemorySnapshots()
+        viewModelFor(StubAnalytics(onRestaurant = { summary(it) }) { summary(it) }, role = "admin", snapshots = snapshots)
+        advanceUntilIdle()
+
+        val vm = viewModelFor(StubAnalytics(onRestaurant = { throw ApiException.offline() }) { summary(it) }, role = "restaurant", snapshots = snapshots)
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value is PerformanceUiState.Error)
+    }
+
+    @Test
+    fun comingBackOnlineReplacesTheSavedCopy() = runTest(dispatcher) {
+        var offline = false
+        val online = MutableStateFlow(true)
+        val vm = viewModelFor(
+            StubAnalytics { if (offline) throw ApiException.offline() else summary(it) },
+            snapshots = MemorySnapshots(),
+            online = online,
+        )
+        advanceUntilIdle()
+        offline = true
+        online.value = false
+        vm.load()
+        advanceUntilIdle()
+        assertEquals(now, (vm.state.value as PerformanceUiState.Content).savedAt)
+
+        offline = false
+        online.value = true
+        advanceUntilIdle()
+
+        assertNull((vm.state.value as PerformanceUiState.Content).savedAt)
+    }
+
+    private val now = Instant.parse("2026-10-27T20:00:00Z")
+
     private fun viewModelFor(
         repository: AnalyticsRepository,
         role: String? = null,
         showLocationGuidance: Boolean = false,
-    ) = PerformanceViewModel(repository, role = role, showLocationGuidance = showLocationGuidance, io = dispatcher)
+        preferences: PerformancePreferences? = null,
+        snapshots: PerformanceSnapshots? = null,
+        online: Flow<Boolean>? = null,
+    ) = PerformanceViewModel(
+        repository, role = role, showLocationGuidance = showLocationGuidance, io = dispatcher,
+        preferences = preferences, snapshots = snapshots, online = online, clock = { now },
+    )
+
+    private class MemoryPreferences(initial: Int) : PerformancePreferences {
+        val saved = MutableStateFlow(initial)
+        override val days: Flow<Int> = saved
+
+        override suspend fun setDays(days: Int) {
+            saved.value = days
+        }
+    }
+
+    private class MemorySnapshots : PerformanceSnapshots {
+        private val saved = mutableMapOf<Pair<String, Int>, SavedPerformance>()
+
+        override suspend fun save(snapshot: SavedPerformance) {
+            saved[snapshot.role to snapshot.days] = snapshot
+        }
+
+        override suspend fun load(role: String, days: Int) = saved[role to days]
+
+        override suspend fun clear() = saved.clear()
+    }
 
     private fun completeness(days: Int) = LocationCompletenessSnapshot(
         periodDays = days,
