@@ -71,8 +71,9 @@ fun EstablishmentsSection(vm: EstablishmentsViewModel) {
                     }
                 }
             }
-            OutlinedButton(onClick = vm::refreshStatus, enabled = !state.working && !state.offline) {
-                Text(if (state.working) "Actualizando…" else "Actualizar estado", color = Palette.Ink)
+            val canRefresh = !state.working && !state.offline
+            OutlinedButton(onClick = vm::refreshStatus, enabled = canRefresh) {
+                Text(if (state.working) "Actualizando…" else "Actualizar estado", color = ink(canRefresh))
             }
 
             Row(
@@ -147,8 +148,10 @@ private fun PinPicker(state: EstablishmentsUiState, vm: EstablishmentsViewModel)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label("Ubicación del local")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = vm::findAddress, enabled = !state.geocoding && state.form.address.isNotBlank() && !state.offline) {
-                Text(if (state.geocoding) "Buscando…" else "Buscar dirección", color = Palette.Ink, fontSize = 13.sp)
+            // Stays enabled offline: tapping it explains that the GPS and the map work without signal.
+            val canSearch = !state.geocoding && state.form.address.isNotBlank()
+            OutlinedButton(onClick = vm::findAddress, enabled = canSearch) {
+                Text(if (state.geocoding) "Buscando…" else "Buscar dirección", color = ink(canSearch), fontSize = 13.sp)
             }
             OutlinedButton(onClick = askLocation, enabled = !state.locating) {
                 Text(if (state.locating) "Ubicando…" else "Usar mi ubicación", color = Palette.Ink, fontSize = 13.sp)
@@ -178,7 +181,9 @@ fun AdminApprovalsSection(vm: AdminViewModel) {
             if (state.offline) {
                 DemoNotice(savedNotice("solicitudes guardadas", state.requestsSavedAt) + " · aprobar se activa al volver la señal")
             }
-            OutlinedButton(onClick = vm::refreshRequests, enabled = !state.offline) { Text("Actualizar solicitudes", color = Palette.Ink) }
+            OutlinedButton(onClick = vm::refreshRequests, enabled = !state.offline) {
+                Text("Actualizar solicitudes", color = ink(!state.offline))
+            }
             if (state.requests.isEmpty()) Note("No hay solicitudes pendientes.")
             state.requests.forEach { request ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -212,7 +217,9 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
             if (state.offline) {
                 DemoNotice(savedNotice("usuarios guardados", state.usersSavedAt) + " · cambiar roles se activa al volver la señal")
             }
-            OutlinedButton(onClick = vm::refreshUsers, enabled = !state.offline) { Text("Actualizar usuarios", color = Palette.Ink) }
+            OutlinedButton(onClick = vm::refreshUsers, enabled = !state.offline) {
+                Text("Actualizar usuarios", color = ink(!state.offline))
+            }
             state.users.forEach { user ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -220,12 +227,13 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
                         Note("${roleName(user.role)} · ${user.id.take(8)}")
                     }
                     if (user.id != currentUserId) {
-                        TextButton(onClick = { vm.askRoleChange(user) }, enabled = state.workingId == null && !state.offline) {
+                        val canChange = state.workingId == null && !state.offline
+                        TextButton(onClick = { vm.askRoleChange(user) }, enabled = canChange) {
                             Text(
                                 if (user.role == "admin") "Quitar admin" else "Hacer admin",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = Palette.Ink,
+                                color = ink(canChange),
                             )
                         }
                     }
@@ -247,6 +255,9 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
         )
     }
 }
+
+/** Text colors are set by hand here, so a disabled button must also look disabled (grayed out). */
+private fun ink(enabled: Boolean) = if (enabled) Palette.Ink else Palette.Ink.copy(alpha = 0.4f)
 
 /** "Sin conexión · solicitudes guardadas a las 10:35 p. m." or just "Sin conexión" when nothing was saved. */
 private fun savedNotice(what: String, savedAt: Instant?): String =
