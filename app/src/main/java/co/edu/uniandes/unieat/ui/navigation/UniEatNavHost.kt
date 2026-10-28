@@ -145,7 +145,14 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             }
             composable<Publish> {
                 val vm: PublishViewModel = viewModel(
-                    factory = simpleFactory { PublishViewModel(container.menuRepository, container.establishmentRepository) },
+                    factory = simpleFactory {
+                        PublishViewModel(
+                            container.menuRepository,
+                            container.establishmentRepository,
+                            store = container.offlineStore,
+                            online = container.connectivity.online,
+                        )
+                    },
                 )
                 PublishScreen(vm = vm, onSessionExpired = expireSession)
             }
@@ -163,7 +170,11 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSignedOut = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
                     roleSections = { me ->
                         if (me.role == "admin") {
-                            val admin: AdminViewModel = viewModel(factory = simpleFactory { AdminViewModel(container.adminRepository) })
+                            val admin: AdminViewModel = viewModel(
+                                factory = simpleFactory {
+                                    AdminViewModel(container.adminRepository, container.offlineStore, container.connectivity.online)
+                                },
+                            )
                             AdminApprovalsSection(admin)
                             AdminRolesSection(admin, currentUserId = me.id)
                         } else {
@@ -179,6 +190,8 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                                             shell.retryProfile()
                                             vm.refresh()
                                         },
+                                        store = container.offlineStore,
+                                        online = container.connectivity.online,
                                     )
                                 },
                             )

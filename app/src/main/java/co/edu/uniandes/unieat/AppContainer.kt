@@ -17,7 +17,9 @@ import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.local.DataStorePerformancePreferences
 import co.edu.uniandes.unieat.data.local.DataStoreProfileCache
+import co.edu.uniandes.unieat.data.local.FileOfflineStore
 import co.edu.uniandes.unieat.data.local.FilePerformanceSnapshots
+import co.edu.uniandes.unieat.data.local.OfflineStore
 import co.edu.uniandes.unieat.data.local.PerformancePreferences
 import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
 import co.edu.uniandes.unieat.data.local.ProfileCache
@@ -141,6 +143,11 @@ class AppContainer(
     /** Last Rendimiento result per role and period, for offline. */
     val performanceSnapshots: PerformanceSnapshots by lazy { FilePerformanceSnapshots(File(context.filesDir, "performance")) }
 
+    /** Saved lists and unsent drafts of Publicar, Mis establecimientos and the admin sections. */
+    val offlineStore: OfflineStore? by lazy {
+        if (usesFakeData) null else FileOfflineStore(File(context.filesDir, "offline"))
+    }
+
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
 
     val analyticsRepository: AnalyticsRepository by lazy {
@@ -165,6 +172,8 @@ class AppContainer(
                 // Waiting reports would otherwise be sent with the next account's session.
                 reportQueue.clear()
                 performanceSnapshots.clear()
+                // Drafts and lists of one restaurant or admin must never show up for the next account.
+                offlineStore?.clear()
                 profileCache?.clear()
             }
         }

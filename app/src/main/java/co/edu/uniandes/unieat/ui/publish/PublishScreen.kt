@@ -50,6 +50,7 @@ import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
+import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.Sticker
@@ -88,6 +89,7 @@ fun PublishScreen(vm: PublishViewModel, onSessionExpired: () -> Unit) {
         if (state.loading) {
             CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
         }
+        offlineNotice(state)?.let { DemoNotice(it) }
         EstablishmentSection(state, vm)
         MenuSection(state.form, vm)
         state.form.dishes.forEach { dish ->
@@ -119,9 +121,9 @@ fun PublishScreen(vm: PublishViewModel, onSessionExpired: () -> Unit) {
             onClick = vm::publish,
             icon = Icons.AutoMirrored.Filled.ArrowForward,
             color = Palette.Coral,
-            enabled = state.form.isValid(now) && !state.saving,
+            enabled = state.form.isValid(now) && !state.saving && !state.offline,
         )
-        MyMenus(state.myMenus, now, onEdit = vm::edit, onClose = vm::close)
+        MyMenus(state.myMenus, now, canClose = !state.offline, onEdit = vm::edit, onClose = vm::close)
     }
 }
 
@@ -133,6 +135,11 @@ private fun EstablishmentSection(state: PublishUiState, vm: PublishViewModel) {
             SectionTitle("Tu establecimiento")
             when {
                 state.editing != null -> Sticker(form.establishmentName, color = Palette.Yellow)
+                state.approved.isEmpty() && state.offline && state.savedAt == null -> Text(
+                    "Sin conexión: tus establecimientos aparecerán aquí al volver la señal. Puedes ir llenando el menú.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 state.approved.isEmpty() && !state.loading -> Text(
                     "No tienes establecimientos aprobados. Solicita uno o actualiza su estado en Perfil.",
                     fontSize = 13.sp,
@@ -277,7 +284,7 @@ private fun DishCard(dish: DishDraft, removable: Boolean, vm: PublishViewModel) 
 }
 
 @Composable
-private fun MyMenus(menus: List<DailyMenu>, now: Instant, onEdit: (DailyMenu) -> Unit, onClose: (DailyMenu) -> Unit) {
+private fun MyMenus(menus: List<DailyMenu>, now: Instant, canClose: Boolean, onEdit: (DailyMenu) -> Unit, onClose: (DailyMenu) -> Unit) {
     if (menus.isEmpty()) {
         SurfaceCard(Modifier.fillMaxWidth()) {
             Text("Aún no has publicado un menú del día.", fontSize = 14.sp)
@@ -300,12 +307,23 @@ private fun MyMenus(menus: List<DailyMenu>, now: Instant, onEdit: (DailyMenu) ->
                         OutlinedButton(onClick = { onEdit(menu) }) { Text("Editar", color = Palette.Ink) }
                     }
                     if (menu.closedAt == null && menu.isActive(now)) {
-                        OutlinedButton(onClick = { onClose(menu) }) { Text("Cerrar publicación", color = Palette.Coral) }
+                        OutlinedButton(onClick = { onClose(menu) }, enabled = canClose) {
+                            Text("Cerrar publicación", color = if (canClose) Palette.Coral else Palette.Ink.copy(alpha = 0.4f))
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** Says what works offline and what waits for the signal, instead of a generic error. */
+private fun offlineNotice(state: PublishUiState): String? = when {
+    !state.offline -> null
+    state.savedAt != null ->
+        "Sin conexión · publicaciones guardadas a las ${SpanishPresentation.time(state.savedAt)} · " +
+            "tu borrador se guarda en el teléfono; publicar y cerrar se activan al volver la señal"
+    else -> "Sin conexión · tu borrador se guarda en el teléfono; publicar y cerrar se activan al volver la señal"
 }
 
 @Composable

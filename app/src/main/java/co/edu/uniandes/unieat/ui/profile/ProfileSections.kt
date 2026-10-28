@@ -38,10 +38,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.detail.OsmMap
 import co.edu.uniandes.unieat.ui.theme.ChipRow
+import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
+import java.time.Instant
 
 /** Student or restaurant: state of their establishments and the request form. */
 @Composable
@@ -50,7 +53,15 @@ fun EstablishmentsSection(vm: EstablishmentsViewModel) {
     SurfaceCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Title("Mis establecimientos")
-            if (state.memberships.isEmpty()) {
+            if (state.offline) {
+                DemoNotice(
+                    savedNotice("estado guardado", state.savedAt) +
+                        " · tu solicitud se guarda como borrador; enviarla y actualizar se activan al volver la señal",
+                )
+            }
+            if (state.memberships.isEmpty() && state.offline && state.savedAt == null) {
+                Text("Tus establecimientos aparecerán aquí al volver la señal.", fontSize = 14.sp)
+            } else if (state.memberships.isEmpty()) {
                 Text("Aún no tienes un local registrado. Solicítalo para poder publicar menús.", fontSize = 14.sp)
             } else {
                 state.memberships.forEach { membership ->
@@ -60,7 +71,7 @@ fun EstablishmentsSection(vm: EstablishmentsViewModel) {
                     }
                 }
             }
-            OutlinedButton(onClick = vm::refreshStatus, enabled = !state.working) {
+            OutlinedButton(onClick = vm::refreshStatus, enabled = !state.working && !state.offline) {
                 Text(if (state.working) "Actualizando…" else "Actualizar estado", color = Palette.Ink)
             }
 
@@ -112,7 +123,7 @@ private fun RequestForm(state: EstablishmentsUiState, vm: EstablishmentsViewMode
         )
         Button(
             onClick = vm::submit,
-            enabled = form.canSubmit && !state.working,
+            enabled = form.canSubmit && !state.working && !state.offline,
             colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink),
         ) {
             Text(if (state.working) "Enviando…" else "Enviar solicitud")
@@ -136,7 +147,7 @@ private fun PinPicker(state: EstablishmentsUiState, vm: EstablishmentsViewModel)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label("Ubicación del local")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = vm::findAddress, enabled = !state.geocoding && state.form.address.isNotBlank()) {
+            OutlinedButton(onClick = vm::findAddress, enabled = !state.geocoding && state.form.address.isNotBlank() && !state.offline) {
                 Text(if (state.geocoding) "Buscando…" else "Buscar dirección", color = Palette.Ink, fontSize = 13.sp)
             }
             OutlinedButton(onClick = askLocation, enabled = !state.locating) {
@@ -164,7 +175,10 @@ fun AdminApprovalsSection(vm: AdminViewModel) {
     SurfaceCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Title("Solicitudes de restaurantes")
-            OutlinedButton(onClick = vm::refreshRequests) { Text("Actualizar solicitudes", color = Palette.Ink) }
+            if (state.offline) {
+                DemoNotice(savedNotice("solicitudes guardadas", state.requestsSavedAt) + " · aprobar se activa al volver la señal")
+            }
+            OutlinedButton(onClick = vm::refreshRequests, enabled = !state.offline) { Text("Actualizar solicitudes", color = Palette.Ink) }
             if (state.requests.isEmpty()) Note("No hay solicitudes pendientes.")
             state.requests.forEach { request ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -172,7 +186,7 @@ fun AdminApprovalsSection(vm: AdminViewModel) {
                     Note("${request.area} · ${request.displayName}")
                     Button(
                         onClick = { vm.approve(request) },
-                        enabled = state.workingId == null,
+                        enabled = state.workingId == null && !state.offline,
                         colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink),
                     ) {
                         Text(if (state.workingId == request.key) "Aprobando…" else "Aprobar local")
@@ -195,7 +209,10 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
                 "Solo otro administrador puede conceder o quitar el rol de administrador. " +
                     "Los restaurantes se habilitan aprobando su solicitud de local.",
             )
-            OutlinedButton(onClick = vm::refreshUsers) { Text("Actualizar usuarios", color = Palette.Ink) }
+            if (state.offline) {
+                DemoNotice(savedNotice("usuarios guardados", state.usersSavedAt) + " · cambiar roles se activa al volver la señal")
+            }
+            OutlinedButton(onClick = vm::refreshUsers, enabled = !state.offline) { Text("Actualizar usuarios", color = Palette.Ink) }
             state.users.forEach { user ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -203,7 +220,7 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
                         Note("${roleName(user.role)} · ${user.id.take(8)}")
                     }
                     if (user.id != currentUserId) {
-                        TextButton(onClick = { vm.askRoleChange(user) }, enabled = state.workingId == null) {
+                        TextButton(onClick = { vm.askRoleChange(user) }, enabled = state.workingId == null && !state.offline) {
                             Text(
                                 if (user.role == "admin") "Quitar admin" else "Hacer admin",
                                 fontWeight = FontWeight.Bold,
@@ -230,6 +247,10 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
         )
     }
 }
+
+/** "Sin conexión · solicitudes guardadas a las 10:35 p. m." or just "Sin conexión" when nothing was saved. */
+private fun savedNotice(what: String, savedAt: Instant?): String =
+    if (savedAt != null) "Sin conexión · $what a las ${SpanishPresentation.time(savedAt)}" else "Sin conexión"
 
 @Composable
 private fun Title(text: String) {
