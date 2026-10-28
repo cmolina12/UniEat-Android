@@ -5,12 +5,15 @@ import co.edu.uniandes.unieat.data.auth.AuthRepository
 import co.edu.uniandes.unieat.data.auth.Session
 import co.edu.uniandes.unieat.data.auth.SessionManager
 import co.edu.uniandes.unieat.data.auth.SessionPersistence
+import co.edu.uniandes.unieat.data.local.ProfileCache
+import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.ProfileRepository
 import co.edu.uniandes.unieat.test.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -72,6 +75,80 @@ class AppShellViewModelTest {
         testScheduler.advanceUntilIdle()
         assertTrue(vm.profileState.value is AppProfileState.Content)
     }
+    private fun signedIn(scope: kotlinx.coroutines.CoroutineScope, userId: String = "u") = SessionManager(
+        ShellAuth(),
+        ShellStore(Session("a", "r", Instant.parse("2026-10-02T13:00:00Z"), userId)),
+        { Instant.parse("2026-10-02T12:00:00Z") },
+        scope,
+    )
+
+    @Test fun `a loaded profile is saved for the next offline launch`() = runTest(main.dispatcher) {
+        val cache = MemoryProfileCache()
+        AppShellViewModel(signedIn(this), ShellProfiles(0), false, cache = cache)
+        testScheduler.advanceUntilIdle()
+        assertEquals("restaurant", cache.load("u")?.role)
+    }
+
+    @Test fun `opening offline uses the saved role so the tabs stay`() = runTest(main.dispatcher) {
+        val cache = MemoryProfileCache().apply { save("u", MeResponse("u", "Admin", "admin")) }
+        val vm = AppShellViewModel(signedIn(this), OfflineProfiles(), false, cache = cache)
+        testScheduler.advanceUntilIdle()
+        val content = vm.profileState.value as AppProfileState.Content
+        assertEquals("admin", content.profile.role)
+        assertTrue(content.saved)
+    }
+
+    @Test fun `opening offline with nothing saved still shows the error`() = runTest(main.dispatcher) {
+        val vm = AppShellViewModel(signedIn(this), OfflineProfiles(), false, cache = MemoryProfileCache())
+        testScheduler.advanceUntilIdle()
+        assertTrue(vm.profileState.value is AppProfileState.Error)
+    }
+
+    @Test fun `another account's saved profile is never used`() = runTest(main.dispatcher) {
+        val cache = MemoryProfileCache().apply { save("someone-else", MeResponse("someone-else", "Admin", "admin")) }
+        val vm = AppShellViewModel(signedIn(this), OfflineProfiles(), false, cache = cache)
+        testScheduler.advanceUntilIdle()
+        assertTrue(vm.profileState.value is AppProfileState.Error)
+    }
+
+    @Test fun `errors that are not about the connection do not hide behind the saved profile`() = runTest(main.dispatcher) {
+        val cache = MemoryProfileCache().apply { save("u", MeResponse("u", "Admin", "admin")) }
+        val vm = AppShellViewModel(signedIn(this), ShellProfiles(1), false, cache = cache)
+        testScheduler.advanceUntilIdle()
+        assertTrue(vm.profileState.value is AppProfileState.Error)
+    }
+
+    @Test fun `back online the saved profile is replaced by the server's`() = runTest(main.dispatcher) {
+        val cache = MemoryProfileCache().apply { save("u", MeResponse("u", "Samuel", "student")) }
+        val online = MutableStateFlow(false)
+        val profiles = OfflineProfiles()
+        val vm = AppShellViewModel(signedIn(this), profiles, false, online, cache)
+        testScheduler.advanceUntilIdle()
+        assertTrue((vm.profileState.value as AppProfileState.Content).saved)
+
+        profiles.offline = false
+        online.value = true
+        testScheduler.advanceUntilIdle()
+
+        val content = vm.profileState.value as AppProfileState.Content
+        assertFalse(content.saved)
+        assertEquals("restaurant", content.profile.role) // the role changed on the server meanwhile
+        assertEquals("restaurant", cache.load("u")?.role)
+    }
+}
+
+private class OfflineProfiles : ProfileRepository {
+    var offline = true
+    override suspend fun me(): MeResponse {
+        if (offline) throw ApiException.offline()
+        return MeResponse("u", "Samuel", "restaurant")
+    }
+}
+private class MemoryProfileCache : ProfileCache {
+    private val saved = mutableMapOf<String, MeResponse>()
+    override suspend fun save(userId: String, profile: MeResponse) { saved.clear(); saved[userId] = profile }
+    override suspend fun load(userId: String) = saved[userId]
+    override suspend fun clear() = saved.clear()
 }
 
 private class ShellProfiles(private var failures: Int) : ProfileRepository {
