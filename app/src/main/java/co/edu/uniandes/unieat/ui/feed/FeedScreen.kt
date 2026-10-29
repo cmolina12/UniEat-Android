@@ -135,7 +135,7 @@ private fun FeedContent(
     ) {
         item { BrandHeader("Hoy") }
         if (isDemo) item { DemoNotice("Datos de prueba (seed.sql) · sin conexión al servidor") }
-        content?.savedAt?.let { savedAt -> item { DemoNotice(offlineCopyNotice(savedAt)) } }
+        content?.savedAt?.let { savedAt -> item { DemoNotice(offlineCopyNotice(savedAt, content.refreshing)) } }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -188,8 +188,9 @@ private fun FeedContent(
     }
 }
 
-internal fun offlineCopyNotice(savedAt: Instant) =
-    "Sin conexión · menús guardados a las ${SpanishPresentation.time(savedAt)} · pueden haber cambiado"
+internal fun offlineCopyNotice(savedAt: Instant, refreshing: Boolean = false) =
+    if (refreshing) "Actualizando… · mientras tanto, menús guardados a las ${SpanishPresentation.time(savedAt)}"
+    else "Sin conexión · menús guardados a las ${SpanishPresentation.time(savedAt)} · pueden haber cambiado"
 
 /** "Filtros" chip next to the section title, same look as the stickers. */
 @Composable

@@ -35,13 +35,15 @@ sealed interface FeedUiState {
     /**
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
-     * [savedAt] is set when the device is offline and the menus come from the last saved copy.
+     * [savedAt] is set when the menus come from the last saved copy: offline, or while [refreshing].
+     * [refreshing]: the saved copy is shown at once while the request is still on its way (slow signal).
      */
     data class Content(
         val menus: List<DailyMenu>,
         val clockOffset: Duration,
         val loadId: String? = null,
         val savedAt: Instant? = null,
+        val refreshing: Boolean = false,
     ) : FeedUiState
 
     /** AUTH_REQUIRED: the screen navigates back to the login. */
@@ -101,7 +103,8 @@ class FeedViewModel(
 
     /** Retry with the current filters. */
     fun load() {
-        if (_state.value is FeedUiState.Loading) return
+        val current = _state.value
+        if (current is FeedUiState.Loading || (current is FeedUiState.Content && current.refreshing)) return
         viewModelScope.launch { fetch(sharedFilters.value) }
     }
 
@@ -132,7 +135,10 @@ class FeedViewModel(
     /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
     private suspend fun fetch(filters: FeedFilters) {
         val attempt = telemetry?.start()
-        _state.value = FeedUiState.Loading
+        // Cache then network: with a saved copy for these filters the student sees menus at once, even on a
+        // weak signal; the request replaces them, or the copy stays with its offline notice if it fails.
+        val saved = cache?.load(filters)
+        _state.value = saved?.let { savedCopy(it).copy(refreshing = true) } ?: FeedUiState.Loading
         _recommendationIndex.value = 0 // a new load starts again at the backend's best option
         _state.value = try {
             val response = repository.feed(filters)
@@ -147,7 +153,7 @@ class FeedViewModel(
             if (attempt != null) telemetry?.failure(attempt, e.code)
             when (e.code) {
                 ApiException.AUTH_REQUIRED -> FeedUiState.SessionExpired
-                ApiException.OFFLINE -> cache?.load(filters)?.let(::savedCopy) ?: FeedUiState.Error(
+                ApiException.OFFLINE -> saved?.let(::savedCopy) ?: FeedUiState.Error(
                     "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
                     e.code,
                 )

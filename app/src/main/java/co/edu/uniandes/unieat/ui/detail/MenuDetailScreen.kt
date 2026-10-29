@@ -194,7 +194,10 @@ private fun MenuDetailContent(
             }
             is MenuDetailUiState.Content -> {
                 state.savedAt?.let {
-                    DemoNotice("Sin conexión · menú guardado a las ${SpanishPresentation.time(it)} · puede haber cambiado")
+                    DemoNotice(
+                        if (state.refreshing) "Actualizando… · mientras tanto, menú guardado a las ${SpanishPresentation.time(it)}"
+                        else "Sin conexión · menú guardado a las ${SpanishPresentation.time(it)} · puede haber cambiado",
+                    )
                 }
                 recommendation?.let { RecommendationCard(it) }
                 MenuBody(

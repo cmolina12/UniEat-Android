@@ -118,7 +118,10 @@ private fun PerformanceContent(
             ) { SolidButton("Reintentar", onClick = onRetry, icon = Icons.Filled.Refresh, color = Palette.Yellow) }
             is PerformanceUiState.Content -> {
                 state.savedAt?.let {
-                    DemoNotice("Sin conexión · datos guardados a las ${SpanishPresentation.time(it)} · se actualizan al volver la señal")
+                    DemoNotice(
+                        if (state.refreshing) "Actualizando… · mientras tanto, datos guardados a las ${SpanishPresentation.time(it)}"
+                        else "Sin conexión · datos guardados a las ${SpanishPresentation.time(it)} · se actualizan al volver la señal",
+                    )
                 }
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
                 // BQ-01 is the admin's (all devices); a restaurant has no access to it.

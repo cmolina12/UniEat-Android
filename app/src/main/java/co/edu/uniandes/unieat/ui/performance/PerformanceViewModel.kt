@@ -41,8 +41,10 @@ sealed interface PerformanceUiState {
         val ownEstablishmentsOnly: Boolean = false,
         val locationGuidance: LocationGuidanceSnapshot? = null,
         val locationCompleteness: LocationCompletenessSnapshot? = null,
-        /** Set when the device is offline and this is the last result saved on the phone. */
+        /** Set when this is the last result saved on the phone: offline, or while [refreshing]. */
         val savedAt: Instant? = null,
+        /** The saved result is shown while the request is still on its way (slow signal). */
+        val refreshing: Boolean = false,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -123,6 +125,10 @@ class PerformanceViewModel(
         _state.value = byPeriod[days] ?: PerformanceUiState.Loading
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
+            // Nothing in memory for this period: the result saved on disk appears while the request runs.
+            if (_state.value == PerformanceUiState.Loading) {
+                savedCopy(days)?.let { _state.value = it.copy(refreshing = true) }
+            }
             _state.value = try {
                 val restaurant = role == ROLE_RESTAURANT
                 val content = withContext(io) {
