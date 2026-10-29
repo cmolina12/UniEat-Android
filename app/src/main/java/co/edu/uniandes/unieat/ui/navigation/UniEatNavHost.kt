@@ -21,10 +21,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -120,9 +122,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     navController.navigate(Feed) { popUpTo<Login> { inclusive = true } }
                 })
             }
-            composable<Feed> {
+            composable<Feed> { entry ->
                 FeedScreen(
-                    onOpenMenu = { navController.navigate(Detail(it)) },
+                    onOpenMenu = { navController.navigateFrom(entry, Detail(it)) },
                     // Expired session: back to the login, clearing the whole back stack.
                     onSessionExpired = expireSession,
                 )
@@ -137,9 +139,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSessionExpired = expireSession,
                 )
             }
-            composable<Recommend> {
+            composable<Recommend> { entry ->
                 RecommendScreen(
-                    onOpenMenu = { id, criterion, reason -> navController.navigate(Detail(id, criterion, reason)) },
+                    onOpenMenu = { id, criterion, reason -> navController.navigateFrom(entry, Detail(id, criterion, reason)) },
                     onSessionExpired = expireSession,
                 )
             }
@@ -228,6 +230,15 @@ private fun TabBar(navController: NavHostController, destination: NavDestination
             )
         }
     }
+}
+
+/**
+ * Navigates only while [from] is the screen on top and active. A quick second tap arrives while the
+ * first navigation is already under way (the list is no longer RESUMED), so it is ignored instead of
+ * stacking a second detail and counting a second detail_open event.
+ */
+private fun NavHostController.navigateFrom(from: NavBackStackEntry, route: Any) {
+    if (from.lifecycle.currentState == Lifecycle.State.RESUMED) navigate(route)
 }
 
 private fun NavDestination?.isOn(tab: Tab): Boolean = this?.hasRoute(tab.route::class) == true

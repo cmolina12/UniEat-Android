@@ -121,7 +121,8 @@ private fun PerformanceContent(
                     DemoNotice("Sin conexión · datos guardados a las ${SpanishPresentation.time(it)} · se actualizan al volver la señal")
                 }
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
-                FeedLoadingBqCard(state.feedLoadReport)
+                // BQ-01 is the admin's (all devices); a restaurant has no access to it.
+                if (!state.ownEstablishmentsOnly) FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
             }

@@ -11,6 +11,9 @@ import co.edu.uniandes.unieat.core.model.RemoteEvent
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadRecord
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
+import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import kotlinx.coroutines.Dispatchers
 import co.edu.uniandes.unieat.data.local.PerformancePreferences
 import co.edu.uniandes.unieat.data.local.PerformanceSnapshots
@@ -23,6 +26,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -103,6 +107,47 @@ class PerformanceViewModelTest {
         vm.selectDays(28)
 
         assertEquals(PerformanceUiState.Loading, vm.state.value)
+    }
+
+    @Test
+    fun aSlowAnswerForTheOldPeriodNeverReplacesTheNewOne() = runTest(dispatcher) {
+        val vm = viewModelFor(StubAnalytics { days ->
+            // The 7-day request is slow (weak signal); the 28-day one answers quickly.
+            delay(if (days == 7) 5_000 else 100)
+            summary(days)
+        })
+        runCurrent() // the 7-day request starts and waits for its slow answer
+        vm.selectDays(28) // while the 7-day request is still in flight
+
+        advanceUntilIdle()
+
+        assertEquals(28, vm.days.value)
+        assertEquals(28, (vm.state.value as PerformanceUiState.Content).summary.periodDays)
+    }
+
+    @Test
+    fun bq01IsOnlyRequestedForAdmins() = runTest(dispatcher) {
+        val loads = CountingFeedLoads()
+        val restaurant = PerformanceViewModel(
+            StubAnalytics(onRestaurant = { summary(it) }) { summary(it) }, loads, role = "restaurant", io = dispatcher,
+        )
+        advanceUntilIdle()
+        assertNull((restaurant.state.value as PerformanceUiState.Content).feedLoadReport)
+        assertEquals(0, loads.calls)
+
+        val admin = PerformanceViewModel(StubAnalytics { summary(it) }, loads, role = "admin", io = dispatcher)
+        advanceUntilIdle()
+        assertEquals(12, (admin.state.value as PerformanceUiState.Content).feedLoadReport?.attempts)
+        assertEquals(1, loads.calls)
+    }
+
+    private class CountingFeedLoads : FeedLoadRepository {
+        var calls = 0
+        override suspend fun upload(loads: List<FeedLoadRecord>) = Unit
+        override suspend fun summary(days: Int): FeedLoadReport {
+            calls++
+            return FeedLoadReport(periodDays = days, attempts = 12, abandoned = 1)
+        }
     }
 
     @Test

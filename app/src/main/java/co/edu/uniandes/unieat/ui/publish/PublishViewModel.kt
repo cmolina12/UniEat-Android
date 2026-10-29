@@ -92,6 +92,21 @@ data class PublishForm(
             paymentMethods.isNotEmpty() &&
             dishes.isNotEmpty() && dishes.all { it.isComplete }
 
+    /** What still keeps the form from being published, in the owner's words (empty when it is valid). */
+    fun missing(now: Instant): List<String> = buildList {
+        if (establishmentId == null) add("elegir un establecimiento aprobado")
+        if (establishmentName.isBlank()) add("el nombre del restaurante")
+        if (title.isBlank()) add("el nombre del menú")
+        if (validUntil <= now) add("una hora de vigencia futura")
+        if (validUntil > now + PublishViewModel.MAX_VALIDITY) add("una vigencia de máximo 24 horas")
+        if (paymentMethods.isEmpty()) add("al menos un medio de pago")
+        dishes.forEachIndexed { index, dish ->
+            val n = if (dishes.size > 1) " del plato ${index + 1}" else " del plato"
+            if (dish.name.isBlank()) add("el nombre$n")
+            if (dish.price <= 0) add("el precio$n")
+        }
+    }
+
     /** Something the owner typed: only then is the form worth keeping as a draft. */
     val hasInput: Boolean
         get() = dishes.any { it.name.isNotBlank() || it.description.isNotBlank() || it.priceText.isNotBlank() }
@@ -329,6 +344,23 @@ class PublishViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Leaves edit mode or throws the draft away and starts an empty menu for the first approved
+     * establishment. The saved draft is deleted too, so it does not come back on the next launch.
+     */
+    fun discardDraft() {
+        val wasEditing = _state.value.editing != null
+        _state.update { state ->
+            val empty = emptyForm()
+            state.copy(
+                editing = null,
+                form = state.approved.firstOrNull()?.let { empty.filledFrom(it) } ?: empty,
+                message = if (wasEditing) "Edición cancelada. El menú publicado no cambió." else "Borrador descartado.",
+            )
+        }
+        viewModelScope.launch { store?.remove(DRAFT_KEY) }
     }
 
     /** Takes the menu out of the feed before it expires; its history stays. */
