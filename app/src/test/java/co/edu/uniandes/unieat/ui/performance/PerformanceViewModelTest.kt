@@ -126,6 +126,27 @@ class PerformanceViewModelTest {
     }
 
     @Test
+    fun onASlowNetworkTheSavedResultShowsWhileTheDashboardLoads() = runTest(dispatcher) {
+        val snapshots = MemorySnapshots()
+        val savedAt = now.minusSeconds(1_800)
+        snapshots.save(SavedPerformance(role = "admin", days = 7, savedAt = savedAt, summary = summary(7)))
+        val vm = viewModelFor(
+            StubAnalytics { days -> delay(8_000); summary(days).copy(impressions = 99) },
+            role = "admin", snapshots = snapshots,
+        )
+        runCurrent()
+
+        val meanwhile = vm.state.value as PerformanceUiState.Content
+        assertTrue(meanwhile.refreshing)
+        assertEquals(savedAt, meanwhile.savedAt)
+
+        advanceUntilIdle()
+        val fresh = vm.state.value as PerformanceUiState.Content
+        assertEquals(99, fresh.summary.impressions)
+        assertNull(fresh.savedAt)
+    }
+
+    @Test
     fun bq01IsOnlyRequestedForAdmins() = runTest(dispatcher) {
         val loads = CountingFeedLoads()
         val restaurant = PerformanceViewModel(

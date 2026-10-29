@@ -29,6 +29,7 @@ import co.edu.uniandes.unieat.data.location.UserLocation
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.FeedCache
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.repository.SavedMenu
 import co.edu.uniandes.unieat.data.repository.savedClockOffset
 import co.edu.uniandes.unieat.data.repository.ReportRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,6 +61,8 @@ sealed interface MenuDetailUiState {
         val clockOffset: Duration,
         val savedAt: Instant? = null,
         val reports: List<MenuReport> = emptyList(),
+        /** The feed's saved copy is shown while the request is still on its way (slow signal). */
+        val refreshing: Boolean = false,
     ) : MenuDetailUiState {
         val location: LocationGuidance = locationGuidance(menu, reports)
     }
@@ -190,6 +193,11 @@ class MenuDetailViewModel(
             it.toContent()
         } ?: MenuDetailUiState.Loading
         viewModelScope.launch {
+            // Not in memory: the feed's saved copy (if any) appears at once instead of a spinner.
+            val fromFeed = if (cached == null) feedCache?.findMenu(menuId) else null
+            if (fromFeed != null && _state.value == MenuDetailUiState.Loading) {
+                _state.value = fromFeed.toContent().copy(refreshing = true)
+            }
             _state.value = try {
                 val response = repository.menu(menuId)
                 memoryCache?.put(menuId, response)
@@ -204,13 +212,9 @@ class MenuDetailViewModel(
                     }
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
                     // Offline, the cached detail (with its reports) beats the feed's copy; it says how old it is.
-                    ApiException.OFFLINE -> cached?.toContent(saved = true) ?: feedCache?.findMenu(menuId)?.let { saved ->
+                    ApiException.OFFLINE -> cached?.toContent(saved = true) ?: (fromFeed ?: feedCache?.findMenu(menuId))?.let { saved ->
                         trackOpen(saved.menu)
-                        MenuDetailUiState.Content(
-                            saved.menu,
-                            clockOffset = savedClockOffset(saved.savedAt, saved.serverNow, deviceClock()),
-                            savedAt = saved.savedAt,
-                        )
+                        saved.toContent()
                     } ?: MenuDetailUiState.Error(OFFLINE_MESSAGE, e.code)
                     else -> MenuDetailUiState.Error(e.error.message, e.code)
                 }
@@ -220,6 +224,12 @@ class MenuDetailViewModel(
 
     private fun MenuDetailResponse.toContent() =
         MenuDetailUiState.Content(menu, Duration.between(deviceClock(), serverNow), reports = reports)
+
+    private fun SavedMenu.toContent() = MenuDetailUiState.Content(
+        menu,
+        clockOffset = savedClockOffset(savedAt, serverNow, deviceClock()),
+        savedAt = savedAt,
+    )
 
     /** The server clock is estimated from when the copy arrived, as with the saved feed. */
     private fun MenuDetailCache.Entry.toContent(saved: Boolean = false) = MenuDetailUiState.Content(

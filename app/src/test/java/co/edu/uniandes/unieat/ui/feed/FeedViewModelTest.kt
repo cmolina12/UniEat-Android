@@ -19,9 +19,13 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -282,6 +286,44 @@ class FeedViewModelTest {
 
         assertEquals(2, calls)
         assertEquals(listOf(menu("a")), (vm.state.value as FeedUiState.Content).menus)
+    }
+
+    @Test
+    fun onASlowNetworkTheSavedCopyShowsAtOnceThenTheFreshFeedReplacesIt() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        val savedAt = serverNow - Duration.ofMinutes(20)
+        cache.save(CachedFeed(FeedFilters(), feedResponse(listOf(menu("a"))), savedAt = savedAt))
+        val vm = FeedViewModel(
+            StubRepository { delay(8_000); feedResponse(listOf(menu("a"), menu("b"))) }, // weak signal
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, cache = cache,
+        )
+        runCurrent()
+
+        val meanwhile = vm.state.value as FeedUiState.Content
+        assertTrue(meanwhile.refreshing)
+        assertEquals(savedAt, meanwhile.savedAt)
+        assertEquals(listOf(menu("a")), meanwhile.menus)
+
+        advanceUntilIdle()
+        val fresh = vm.state.value as FeedUiState.Content
+        assertFalse(fresh.refreshing)
+        assertNull(fresh.savedAt)
+        assertEquals(2, fresh.menus.size)
+    }
+
+    @Test
+    fun ifTheSlowRequestFailsTheCopyStaysAsAnOfflineCopy() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        cache.save(CachedFeed(FeedFilters(), feedResponse(listOf(menu("a"))), savedAt = serverNow))
+        val vm = FeedViewModel(
+            StubRepository { delay(10_000); throw ApiException.offline() }, // the timeout
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, cache = cache,
+        )
+        advanceUntilIdle()
+
+        val state = vm.state.value as FeedUiState.Content
+        assertFalse(state.refreshing)
+        assertEquals(serverNow, state.savedAt)
     }
 
     private class MemoryCache : FeedCache {
