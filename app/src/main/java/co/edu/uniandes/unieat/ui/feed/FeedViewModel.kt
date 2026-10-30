@@ -65,7 +65,11 @@ class FeedViewModel(
     /** BQ-01 load telemetry (Samuel). Optional so the existing tests keep their constructor. */
     private val telemetry: FeedLoadTelemetry? = null,
     private val cache: FeedCache? = null,
-    /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
+    /**
+     * Validated-connection changes. Losing the signal turns the menus on screen into the saved copy (with its
+     * time), so the student is told they may be out of date; going back online reloads an offline error or a
+     * saved copy.
+     */
     online: Flow<Boolean>? = null,
 ) : ViewModel() {
 
@@ -91,8 +95,19 @@ class FeedViewModel(
             sharedFilters.collectLatest { fetch(it) }
         }
         if (online != null) viewModelScope.launch {
-            online.collect { if (it && isShowingOfflineState()) load() }
+            online.collect { isOnline ->
+                if (isOnline) { if (isShowingOfflineState()) load() } else markAsSavedCopy()
+            }
         }
+    }
+
+    /** The live menus were saved when they arrived; that copy carries the time for the offline notice. */
+    private suspend fun markAsSavedCopy() {
+        val live = _state.value as? FeedUiState.Content ?: return
+        if (live.savedAt != null) return
+        val saved = cache?.load(sharedFilters.value) ?: return
+        // A new load may have started while the copy was read; it owns the state then.
+        if (_state.value === live) _state.value = savedCopy(saved)
     }
 
     private fun isShowingOfflineState() = when (val current = _state.value) {

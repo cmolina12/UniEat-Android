@@ -129,7 +129,10 @@ class MenuDetailViewModel(
     val isDemo: Boolean = false,
     val fixtures: List<DemoFixture> = emptyList(),
     private val feedCache: FeedCache? = null,
-    /** Validated-connection changes; going back online reloads an offline error or a saved copy. */
+    /**
+     * Validated-connection changes. Losing the signal shows the detail on screen as a saved copy with its time;
+     * going back online reloads an offline error or a saved copy.
+     */
     online: Flow<Boolean>? = null,
     /** Offline reports (Room). Without it, a report made offline is lost and the student is told so. */
     private val reportQueue: ReportQueue? = null,
@@ -172,7 +175,14 @@ class MenuDetailViewModel(
         load()
         if (online != null) viewModelScope.launch {
             online.collect { isOnline ->
-                if (!isOnline) return@collect
+                if (!isOnline) {
+                    // The detail on screen is in the LruCache with the time it arrived: shown as a saved copy.
+                    val live = _state.value as? MenuDetailUiState.Content
+                    if (live != null && live.savedAt == null) {
+                        memoryCache?.get(menuId)?.let { _state.value = it.toContent(saved = true) }
+                    }
+                    return@collect
+                }
                 when (val current = _state.value) {
                     is MenuDetailUiState.Error -> if (current.code == ApiException.OFFLINE) load()
                     is MenuDetailUiState.Content -> if (current.savedAt != null) refreshQuietly()
