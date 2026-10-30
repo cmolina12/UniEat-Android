@@ -326,6 +326,25 @@ class FeedViewModelTest {
         assertEquals(serverNow, state.savedAt)
     }
 
+    @Test
+    fun losingTheSignalAfterLoadingShowsTheMenusAsTheSavedCopy() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        val connection = MutableStateFlow(true)
+        val vm = FeedViewModel(
+            StubRepository { feedResponse(listOf(menu("a"))) },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, cache = cache, online = connection,
+        )
+        advanceUntilIdle()
+        assertNull((vm.state.value as FeedUiState.Content).savedAt)
+
+        connection.value = false // the elevator: the signal drops while the student reads the feed
+        advanceUntilIdle()
+
+        val shown = vm.state.value as FeedUiState.Content
+        assertEquals(listOf(menu("a")), shown.menus)
+        assertEquals(serverNow, shown.savedAt)
+    }
+
     private class MemoryCache : FeedCache {
         private val entries = mutableMapOf<FeedFilters, CachedFeed>()
         override suspend fun save(entry: CachedFeed) { entries[entry.filters] = entry }

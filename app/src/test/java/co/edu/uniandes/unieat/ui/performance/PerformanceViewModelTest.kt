@@ -402,6 +402,19 @@ class PerformanceViewModelTest {
         assertNull((vm.state.value as PerformanceUiState.Content).savedAt)
     }
 
+    @Test
+    fun losingTheSignalAfterLoadingLabelsTheNumbersWithTheirSaveTime() = runTest(dispatcher) {
+        val online = MutableStateFlow(true)
+        val vm = viewModelFor(StubAnalytics { summary(it) }, snapshots = MemorySnapshots(), online = online)
+        advanceUntilIdle()
+        assertNull((vm.state.value as PerformanceUiState.Content).savedAt)
+
+        online.value = false
+        advanceUntilIdle()
+
+        assertEquals(now, (vm.state.value as PerformanceUiState.Content).savedAt)
+    }
+
     private val now = Instant.parse("2026-10-27T20:00:00Z")
 
     private fun viewModelFor(

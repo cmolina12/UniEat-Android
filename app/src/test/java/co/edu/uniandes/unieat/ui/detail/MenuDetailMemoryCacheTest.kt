@@ -7,6 +7,7 @@ import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -86,6 +87,24 @@ class MenuDetailMemoryCacheTest {
 
         assertTrue(vm.state.value is MenuDetailUiState.Gone)
         assertNull(cache["m"])
+    }
+
+    @Test
+    fun losingTheSignalAfterLoadingShowsTheDetailAsASavedCopy() = runTest(dispatcher) {
+        val connection = MutableStateFlow(true)
+        val vm = MenuDetailViewModel(
+            "m", MenuDetailViewModelTest.StubRepository { detail("Tazón") }, StubLocation(), RecordingTracker(), StubReports(),
+            memoryCache = cache, online = connection,
+        ) { serverNow }
+        advanceUntilIdle()
+        assertNull((vm.state.value as MenuDetailUiState.Content).savedAt)
+
+        connection.value = false
+        advanceUntilIdle()
+
+        val shown = vm.state.value as MenuDetailUiState.Content
+        assertEquals("Tazón", shown.menu.title)
+        assertEquals(serverNow, shown.savedAt)
     }
 
     private fun viewModel(detail: suspend () -> MenuDetailResponse) = MenuDetailViewModel(

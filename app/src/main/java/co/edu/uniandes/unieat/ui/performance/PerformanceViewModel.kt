@@ -71,7 +71,10 @@ class PerformanceViewModel(
     private val preferences: PerformancePreferences? = null,
     /** Last result per role and period, for offline. */
     private val snapshots: PerformanceSnapshots? = null,
-    /** Validated-connection changes; coming back online replaces the saved copy with fresh numbers. */
+    /**
+     * Validated-connection changes. Losing the signal labels the numbers on screen with the time they were saved;
+     * coming back online replaces the saved copy with fresh numbers.
+     */
     online: Flow<Boolean>? = null,
     private val clock: () -> Instant = Instant::now,
 ) : ViewModel() {
@@ -105,8 +108,15 @@ class PerformanceViewModel(
         }
         if (online != null) viewModelScope.launch {
             online.collect { isOnline ->
-                if (!isOnline) return@collect
                 val current = _state.value
+                if (!isOnline) {
+                    // The numbers on screen were saved to disk when they arrived; that copy carries the time.
+                    if (current is PerformanceUiState.Content && current.savedAt == null) {
+                        val saved = savedCopy(_days.value)
+                        if (saved != null && _state.value === current) _state.value = saved
+                    }
+                    return@collect
+                }
                 val showingSaved = current is PerformanceUiState.Content && current.savedAt != null
                 val offlineError = current is PerformanceUiState.Error && current.code == ApiException.OFFLINE
                 if (showingSaved || offlineError) load()
