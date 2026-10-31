@@ -1,5 +1,7 @@
 package co.edu.uniandes.unieat.ui.feed
 
+import android.util.Log
+import androidx.collection.SparseArrayCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.DailyMenu
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
@@ -82,7 +86,22 @@ fun RecommendScreen(
                 content.savedAt?.let { DemoNotice(offlineCopyNotice(it, content.refreshing)) }
                 // Strategy pattern: the active criterion picks among the backend's options
                 val serverNow = rememberServerNow(content.clockOffset)
-                val recommended = strategy.pick(content.menus, index, serverNow)
+                val pickCache = remember(content.menus, strategy) { SparseArrayCompat<DailyMenu>() }
+                val recommended = if (content.menus.isEmpty()) {
+                    strategy.pick(content.menus, index, serverNow)
+                } else {
+                    val key = index % content.menus.size
+                    val cached = pickCache.get(key)
+                    if (cached != null) {
+                        Log.d("PickCache", "hit $key")
+                        cached
+                    } else {
+                        Log.d("PickCache", "miss $key")
+                        val picked = strategy.pick(content.menus, index, serverNow)
+                        if (picked != null) pickCache.put(key, picked)
+                        picked
+                    }
+                }
                 if (recommended == null) {
                     EmptyFeedCard()
                 } else {
