@@ -11,6 +11,8 @@ import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
+import co.edu.uniandes.unieat.data.pilot.CachePilotReport
+import co.edu.uniandes.unieat.data.pilot.CachePilotRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
@@ -45,6 +47,8 @@ sealed interface PerformanceUiState {
         val savedAt: Instant? = null,
         /** Saved copy shown while the request is still running (slow signal). */
         val refreshing: Boolean = false,
+        /** BQ-13 (Samuel): cache pilot comparison; admins only, null if it could not be loaded. */
+        val cachePilot: CachePilotReport? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -74,6 +78,8 @@ class PerformanceViewModel(
     /** Offline: the numbers get their saved time. Back online: reload. */
     online: Flow<Boolean>? = null,
     private val clock: () -> Instant = Instant::now,
+    /** BQ-13 (Samuel): optional card, like BQ-01; its failure never hides the rest of the dashboard. */
+    private val cachePilot: CachePilotRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
@@ -136,8 +142,13 @@ class PerformanceViewModel(
                     val feedLoad = async { if (role == ROLE_ADMIN) feedLoadReport() else null }
                     val guidance = async { locationGuidance(days, restaurant) }
                     val completeness = async { locationCompleteness(days) }
-                    // only the summary can fail the screen, the BQ cards are optional
-                    PerformanceUiState.Content(summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await())
+                    // BQ-13 (Samuel): a fifth child coroutine on IO, in parallel with the other four.
+                    val pilot = async { if (role == ROLE_ADMIN) cachePilotReport(days) else null }
+                    // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
+                    PerformanceUiState.Content(
+                        summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await(),
+                        cachePilot = pilot.await(),
+                    )
                 }
                 byPeriod.put(days, content)
                 save(content, days)
@@ -163,6 +174,7 @@ class PerformanceViewModel(
                     summary = content.summary, feedLoadReport = content.feedLoadReport,
                     ownEstablishmentsOnly = content.ownEstablishmentsOnly,
                     locationGuidance = content.locationGuidance, locationCompleteness = content.locationCompleteness,
+                    cachePilot = content.cachePilot,
                 ),
             )
         }
@@ -173,6 +185,7 @@ class PerformanceViewModel(
         return PerformanceUiState.Content(
             saved.summary, saved.feedLoadReport, saved.ownEstablishmentsOnly,
             saved.locationGuidance, saved.locationCompleteness, savedAt = saved.savedAt,
+            cachePilot = saved.cachePilot,
         )
     }
 
@@ -188,6 +201,13 @@ class PerformanceViewModel(
             if (restaurant) repository.restaurantLocationGuidance(days) else repository.locationGuidance(days)
         }.getOrNull()
     }
+
+    /**
+     * BQ-13 (Samuel): same period as the rest of the dashboard (7 or 28 days). Admin-only, like BQ-01: it is
+     * a decision about the app (keep or revise the cache), not information for one restaurant.
+     */
+    private suspend fun cachePilotReport(days: Int): CachePilotReport? =
+        cachePilot?.let { runCatching { it.summary(days) }.getOrNull() }
 
     /** BQ-10: same roles as BQ-05. If it fails the rest still shows. */
     private suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot? {
@@ -221,6 +241,7 @@ class PerformanceViewModel(
                     preferences = app.container.performancePreferences,
                     snapshots = app.container.performanceSnapshots,
                     online = app.container.connectivity.online,
+                    cachePilot = app.container.cachePilotRepository,
                 )
             }
         }

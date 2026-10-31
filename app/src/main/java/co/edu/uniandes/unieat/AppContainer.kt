@@ -29,7 +29,16 @@ import co.edu.uniandes.unieat.data.local.settingsDataStore
 import co.edu.uniandes.unieat.data.local.UniEatDatabase
 import co.edu.uniandes.unieat.data.local.WorkManagerReportScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
+import co.edu.uniandes.unieat.data.network.ConnectionType
 import co.edu.uniandes.unieat.data.network.ConnectivityMonitor
+import co.edu.uniandes.unieat.data.pilot.CachePilot
+import co.edu.uniandes.unieat.data.pilot.CachePilotRepository
+import co.edu.uniandes.unieat.data.pilot.CachePilotUploader
+import co.edu.uniandes.unieat.data.pilot.DataStorePilotEnrollment
+import co.edu.uniandes.unieat.data.pilot.LocalCachePilotRepository
+import co.edu.uniandes.unieat.data.pilot.PilotEventTracker
+import co.edu.uniandes.unieat.data.pilot.RemoteCachePilotRepository
+import co.edu.uniandes.unieat.data.pilot.WorkManagerCachePilotScheduler
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
@@ -164,8 +173,54 @@ class AppContainer(
 
     val eventUploader: EventUploader by lazy { EventUploader(eventQueue, analyticsRepository) }
 
+    /**
+     * Decorator (Samuel, BQ-13): every event still goes to the analytics queue unchanged; the pilot also
+     * hears about it, so a "selection" marks the current pilot visit without touching the screens.
+     */
     val eventTracker: EventTracker by lazy {
-        QueuedEventTracker(eventQueue, flushScheduler, appScope, appVersion = BuildConfig.VERSION_NAME)
+        val queued = QueuedEventTracker(eventQueue, flushScheduler, appScope, appVersion = BuildConfig.VERSION_NAME)
+        PilotEventTracker(queued) { kind ->
+            val at = System.currentTimeMillis()
+            appScope.launch { cachePilot.onInteraction(kind, at) }
+        }
+    }
+
+    // ---- BQ-13 cache pilot (Samuel) -------------------------------------------------------------
+    // Enrollment in DataStore "unieat_settings", one row per visit in Room, upload with WorkManager,
+    // answer from the backend with this device's rows as fallback.
+
+    val cachePilotScheduler: FlushScheduler by lazy { WorkManagerCachePilotScheduler(context) }
+
+    val cachePilot: CachePilot by lazy {
+        CachePilot(
+            enrollment = DataStorePilotEnrollment(context.settingsDataStore),
+            dao = database.cachePilotSessions(),
+            // Demo mode has no Supabase session; its profile is "demo-user", so the pilot can be shown offline too.
+            currentUser = {
+                (sessionManager.state.value as? AuthState.SignedIn)?.session?.userId ?: DEMO_USER.takeIf { usesFakeData }
+            },
+            connectionType = { ConnectionType.current(context) },
+            onVisitEnded = { cachePilotScheduler.schedule() },
+        )
+    }
+
+    val cachePilotRepository: CachePilotRepository by lazy {
+        val local = LocalCachePilotRepository(cachePilot)
+        if (usesFakeData) local else RemoteCachePilotRepository(apiClient, local)
+    }
+
+    val cachePilotUploader: CachePilotUploader by lazy { CachePilotUploader(cachePilot, cachePilotRepository) }
+
+    /**
+     * Called once per launch. Ending the visits of the previous launch is local work, so it happens now on
+     * IO, with or without signal; only the upload waits for the network (WorkManager). Doing the closing
+     * inside the worker would leave visits open while a previous upload is still in its retry backoff.
+     */
+    fun startCachePilot() {
+        appScope.launch {
+            cachePilot.closeFinishedSessions()
+            cachePilotScheduler.schedule()
+        }
     }
 
     init {
@@ -180,7 +235,15 @@ class AppContainer(
                 // one account's drafts and lists can't show up for the next one
                 offlineStore?.clear()
                 profileCache?.clear()
+                // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
+                // is always "signed out", so clearing there would wipe the demo pilot on every launch.
+                if (!usesFakeData) cachePilot.clear()
             }
         }
+    }
+
+    private companion object {
+        /** Same id as FakeProfileRepository's demo profile. */
+        const val DEMO_USER = "demo-user"
     }
 }

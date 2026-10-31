@@ -5,6 +5,7 @@ import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.core.model.UniEatJson
+import co.edu.uniandes.unieat.data.pilot.CachePilotReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,8 @@ data class SavedPerformance(
     val ownEstablishmentsOnly: Boolean = false,
     val locationGuidance: LocationGuidanceSnapshot? = null,
     val locationCompleteness: LocationCompletenessSnapshot? = null,
+    /** BQ-13 (Samuel). Default null, so copies saved before this field existed still decode. */
+    val cachePilot: CachePilotReport? = null,
 )
 
 interface PerformanceSnapshots {
