@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat.ui.wait
 
 import android.util.Log
+import android.widget.Toast
 import androidx.collection.LruCache
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -9,12 +10,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
@@ -71,19 +74,6 @@ class WaitMeasurementViewModel(
         }
     }
 
-    fun readPendingMinutesVM(context: android.content.Context, callback: (Int?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val pendingMinutes = readPendingMinutes(context)
-            callback(pendingMinutes)
-        }
-    }
-
-    fun clearPendingMinutesVM(context: android.content.Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            clearPendingMinutes(context)
-        }
-    }
-
     fun calculateWaitMinutes(start: Long, end: Long): Int? {
         return waitMinutes(start, end)
     }
@@ -91,9 +81,12 @@ class WaitMeasurementViewModel(
     fun finishMeasurement(context: android.content.Context) {
         canFinishState.value = false
         viewModelScope.launch(Dispatchers.IO) {
-            val arrival = readArrival(context)
-            val menuId = readMenuId(context)
-            val version = readVersion(context)
+            val arrivalDeferred = async { readArrival(context) }
+            val menuIdDeferred = async { readMenuId(context) }
+            val versionDeferred = async { readVersion(context) }
+            val arrival = arrivalDeferred.await()
+            val menuId = menuIdDeferred.await()
+            val version = versionDeferred.await()
             if (arrival != null && menuId != null && version != null) {
                 val minutes = calculateWaitMinutes(arrival, System.currentTimeMillis())
                 if (minutes != null) {
@@ -108,22 +101,23 @@ class WaitMeasurementViewModel(
     }
 
     fun tryAgain(context: android.content.Context) {
-        readPendingMinutesVM(context) { minutes ->
-            if (minutes == null) return@readPendingMinutesVM
-            viewModelScope.launch(Dispatchers.IO) {
-                val menuId = readPendingMenuId(context) ?: return@launch
-                val version = readPendingVersion(context) ?: return@launch
-                val body = ReportBody(
-                    publicationId = menuId,
-                    version = version,
-                    kind = ReportKind.LONG_LINE,
-                    observedWaitMinutes = minutes,
-                )
-                try {
-                    reportRepository.submit(body)
-                    clearPendingMinutesVM(context)
-                } catch (e: ApiException) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val minutes = readPendingMinutes(context) ?: return@launch
+            val menuId = readPendingMenuId(context) ?: return@launch
+            val version = readPendingVersion(context) ?: return@launch
+            val body = ReportBody(
+                publicationId = menuId,
+                version = version,
+                kind = ReportKind.LONG_LINE,
+                observedWaitMinutes = minutes,
+            )
+            try {
+                reportRepository.submit(body)
+                clearPendingMinutes(context)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context.applicationContext, "Tu medición de espera se envió", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: ApiException) {
             }
         }
     }
