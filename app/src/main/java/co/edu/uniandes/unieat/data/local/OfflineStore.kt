@@ -14,21 +14,18 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
 
-/** A value read from disk and when it was saved, so the screen can say "guardado a las HH:MM". */
+/** A value from disk and when it was saved, for "guardado a las HH:MM". */
 @Serializable
 data class Saved<T>(
     @Serializable(InstantSerializer::class) val savedAt: Instant,
     val value: T,
 )
 
-/**
- * Small JSON copies for the restaurant and admin screens: the last list that loaded (shown offline)
- * and the forms not sent yet (drafts). Everything belongs to the signed-in account, so [clear] runs on sign-out.
- */
+/** Small JSON copies for the restaurant/admin screens: last lists (offline) and unsent drafts. Cleared on sign-out. */
 interface OfflineStore {
     suspend fun <T> save(key: String, serializer: KSerializer<T>, value: T)
 
-    /** null when nothing was saved under [key] or the file can no longer be read. */
+    /** null if nothing was saved or the file can't be read. */
     suspend fun <T> load(key: String, serializer: KSerializer<T>): Saved<T>?
 
     suspend fun remove(key: String)
@@ -36,7 +33,7 @@ interface OfflineStore {
     suspend fun clear()
 }
 
-/** One file per key. Written to a temporary file and then moved over the old one, like the Rendimiento copies. */
+/** One file per key. Written to a temp file and then moved over the old one (atomic). */
 class FileOfflineStore(
     private val dir: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -61,7 +58,7 @@ class FileOfflineStore(
             try {
                 if (file.exists()) UniEatJson.decodeFromString(Saved.serializer(serializer), file.readText()) else null
             } catch (_: Exception) {
-                // A damaged file, or one from an older version of the model, counts as "nothing saved".
+                // damaged file or old model version = nothing saved
                 null
             }
         }

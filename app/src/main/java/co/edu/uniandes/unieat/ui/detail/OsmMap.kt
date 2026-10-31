@@ -58,7 +58,7 @@ private const val SAME_SPOT_METERS = 15.0
 
 private const val SHOW_ACCURACY_ABOVE_METERS = 25f
 
-/** The legend and credit sit on top of the map; with a huge system font they would hide the pins. */
+/** Legend and credit go on top of the map, with a huge system font they'd hide the pins. */
 private const val MAX_OVERLAY_FONT_SCALE = 1.3f
 
 @Composable
@@ -68,7 +68,7 @@ fun OsmMap(
     modifier: Modifier = Modifier,
     user: Coordinate? = null,
     userAccuracyMeters: Float? = null,
-    /** When set, a tap on the map reports where (used to move a pin); otherwise the map ignores touches. */
+    /** If set, a tap on the map reports where (to move a pin). Otherwise touches are ignored. */
     onTap: ((Coordinate) -> Unit)? = null,
 ) {
     Box(modifier.background(Palette.Cream)) {
@@ -257,7 +257,7 @@ private fun configureOsmdroid(context: Context) {
     val base = File(context.cacheDir, "osmdroid")
     config.osmdroidBasePath = base
     config.osmdroidTileCache = File(base, "tiles")
-    // osmdroid keeps up to 600 MB of tiles by default; a few campus blocks need far less.
+    // osmdroid keeps up to 600 MB of tiles by default, a few campus blocks need much less
     config.tileFileSystemCacheMaxBytes = 50L * 1024 * 1024
     config.tileFileSystemCacheTrimBytes = 40L * 1024 * 1024
     config.userAgentValue = context.packageName

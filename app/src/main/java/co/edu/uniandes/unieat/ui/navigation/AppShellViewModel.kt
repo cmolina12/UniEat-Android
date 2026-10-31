@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 sealed interface AppProfileState {
     data object Loading : AppProfileState
-    /** [saved]: the last profile stored on this device, shown because GET /me could not reach the server. */
+    /** saved: last profile on this device, shown because GET /me couldn't reach the server. */
     data class Content(val profile: MeResponse, val saved: Boolean = false) : AppProfileState
     data class Error(val message: String) : AppProfileState
     data object Unavailable : AppProfileState
@@ -32,7 +32,7 @@ class AppShellViewModel(
     private val demo: Boolean,
     /** Validated-connection changes; going back online retries a failed GET /me. */
     online: Flow<Boolean> = emptyFlow(),
-    /** Last profile of each sign-in, so the role survives opening the app offline. null in demo. */
+    /** Last profile per sign-in, so the role works when opening offline. null in demo. */
     private val cache: ProfileCache? = null,
 ) : ViewModel() {
     private val _profileState = MutableStateFlow<AppProfileState>(AppProfileState.Loading)
@@ -56,7 +56,7 @@ class AppShellViewModel(
                 }
         }
         viewModelScope.launch {
-            // Also refresh a saved profile: the role may have changed on the server meanwhile.
+            // refresh a saved profile too, the role may have changed on the server
             online.collect { if (it && needsRefresh()) loadProfile() }
         }
     }
@@ -73,14 +73,14 @@ class AppShellViewModel(
 
     private suspend fun loadProfile() {
         val userId = (sessions.state.value as? AuthState.SignedIn)?.session?.userId
-        // Keep the saved profile on screen while refreshing it, so the tabs do not disappear and come back.
+        // keep the saved profile while refreshing so the tabs don't blink
         if (_profileState.value !is AppProfileState.Content) _profileState.value = AppProfileState.Loading
         _profileState.value = try {
             val profile = profiles.me()
             if (userId != null) cache?.save(userId, profile)
             AppProfileState.Content(profile)
         } catch (e: Exception) {
-            // Only "no internet" uses the saved copy: an expired session or a server error must stay visible.
+            // only "no internet" uses the saved copy, expired session or server errors stay visible
             val saved = if (e is ApiException && e.code == ApiException.OFFLINE && userId != null) cache?.load(userId) else null
             if (saved != null) AppProfileState.Content(saved, saved = true)
             else AppProfileState.Error(e.message ?: "No se pudo cargar el perfil.")

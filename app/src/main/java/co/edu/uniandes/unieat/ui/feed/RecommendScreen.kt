@@ -49,7 +49,8 @@ import androidx.compose.ui.platform.LocalContext
 fun RecommendScreen(
     onOpenMenu: (menuId: String, criterion: String, reason: String) -> Unit,
     onSessionExpired: () -> Unit,
-    viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory()),
+    // BQ-13: follows the user's cache policy but does not open pilot visits (only "Hoy" does).
+    viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory(recordsPilot = false)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()

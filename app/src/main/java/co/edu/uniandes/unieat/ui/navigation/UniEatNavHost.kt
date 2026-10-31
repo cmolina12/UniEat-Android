@@ -50,6 +50,8 @@ import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
 import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
 import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
 import co.edu.uniandes.unieat.ui.profile.AdminViewModel
+import co.edu.uniandes.unieat.ui.profile.CachePilotSection
+import co.edu.uniandes.unieat.ui.profile.CachePilotViewModel
 import co.edu.uniandes.unieat.ui.profile.EstablishmentsSection
 import co.edu.uniandes.unieat.ui.profile.EstablishmentsViewModel
 import co.edu.uniandes.unieat.ui.publish.PublishScreen
@@ -103,7 +105,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             if (profileState is AppProfileState.Error && authState is AuthState.SignedIn) {
                 Surface {
                     Row(
-                        // Below the status bar: the system takes every touch drawn under it.
+                        // below the status bar, the system takes the touches drawn under it
                         modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -117,7 +119,10 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
     ) { padding ->
         NavHost(navController, startDestination = initialDestination, modifier = Modifier.padding(padding)) {
             composable<Login> {
-                val vm: LoginViewModel = viewModel(factory = simpleFactory { LoginViewModel(container.sessionManager) })
+                // The connectivity flow lets the login explain, before sending, that it needs signal (Samuel).
+                val vm: LoginViewModel = viewModel(
+                    factory = simpleFactory { LoginViewModel(container.sessionManager, container.connectivity.online) },
+                )
                 LoginScreen(vm = vm, demo = container.usesFakeData, onSignedIn = {
                     navController.navigate(Feed) { popUpTo<Login> { inclusive = true } }
                 })
@@ -192,7 +197,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                                         container.establishmentRepository,
                                         container.locationRepository,
                                         container.addressGeocoder,
-                                        // An approval can turn the account into a restaurant: tabs and role refresh.
+                                        // an approval can turn the account into a restaurant, refresh tabs and role
                                         onAccountChanged = {
                                             shell.retryProfile()
                                             vm.refresh()
@@ -204,6 +209,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                             )
                             EstablishmentsSection(establishments)
                         }
+                        // BQ-13 consent (Samuel), for every role: anybody who uses "Hoy" can join the pilot.
+                        val pilot: CachePilotViewModel = viewModel(factory = simpleFactory { CachePilotViewModel(container.cachePilot) })
+                        CachePilotSection(pilot)
                     },
                 )
             }
@@ -232,11 +240,7 @@ private fun TabBar(navController: NavHostController, destination: NavDestination
     }
 }
 
-/**
- * Navigates only while [from] is the screen on top and active. A quick second tap arrives while the
- * first navigation is already under way (the list is no longer RESUMED), so it is ignored instead of
- * stacking a second detail and counting a second detail_open event.
- */
+/** Only navigates if [from] is still on top (RESUMED). A fast second tap is ignored, so no double detail or detail_open. */
 private fun NavHostController.navigateFrom(from: NavBackStackEntry, route: Any) {
     if (from.lifecycle.currentState == Lifecycle.State.RESUMED) navigate(route)
 }
@@ -248,10 +252,7 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
     override fun <T : ViewModel> create(modelClass: Class<T>): T = builder() as T
 }
 
-/**
- * Context-aware UX, same tabs as iOS: a restaurant gets "Publicar" in place of "Elige por mí";
- * performance is restaurant/admin. Backend authorization remains authoritative.
- */
+/** Tabs by role, like iOS: restaurants get "Publicar" instead of "Elige por mí". The backend still checks access. */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
     Tab.RECOMMEND -> demo || role != "restaurant"
     Tab.PUBLISH -> demo || role == "restaurant"

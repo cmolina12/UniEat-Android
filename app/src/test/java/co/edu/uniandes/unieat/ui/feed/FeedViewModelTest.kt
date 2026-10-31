@@ -7,6 +7,9 @@ import co.edu.uniandes.unieat.core.model.FeedResponse
 import co.edu.uniandes.unieat.core.model.MenuBody
 import co.edu.uniandes.unieat.core.model.MenuDetailResponse
 import co.edu.uniandes.unieat.data.analytics.EventKind
+import co.edu.uniandes.unieat.data.pilot.ContentSource
+import co.edu.uniandes.unieat.data.pilot.FeedPilot
+import co.edu.uniandes.unieat.data.pilot.PilotVariant
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.CachedFeed
 import co.edu.uniandes.unieat.data.repository.FeedCache
@@ -324,6 +327,48 @@ class FeedViewModelTest {
         val state = vm.state.value as FeedUiState.Content
         assertFalse(state.refreshing)
         assertEquals(serverNow, state.savedAt)
+    }
+
+    @Test
+    fun losingTheSignalAfterLoadingShowsTheMenusAsTheSavedCopy() = runTest(dispatcher) {
+        val cache = MemoryCache()
+        val connection = MutableStateFlow(true)
+        val vm = FeedViewModel(
+            StubRepository { feedResponse(listOf(menu("a"))) },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow }, cache = cache, online = connection,
+        )
+        advanceUntilIdle()
+        assertNull((vm.state.value as FeedUiState.Content).savedAt)
+
+        connection.value = false // the elevator: the signal drops while the student reads the feed
+        advanceUntilIdle()
+
+        val shown = vm.state.value as FeedUiState.Content
+        assertEquals(listOf(menu("a")), shown.menus)
+        assertEquals(serverNow, shown.savedAt)
+    }
+
+    @Test
+    fun losingTheSignalInTheOnlineOnlyGroupKeepsTheLiveMenus() = runTest(dispatcher) {
+        val connection = MutableStateFlow(true)
+        val onlineOnly = object : FeedPilot {
+            override suspend fun variant() = PilotVariant.ONLINE_ONLY
+            override suspend fun onLoadStarted(token: String, variant: PilotVariant, startedAtMillis: Long, cacheAgeMs: Long?) = Unit
+            override suspend fun onContentDrawn(token: String, source: ContentSource, atMillis: Long) = Unit
+            override suspend fun onLoadFailed(token: String, showedSavedCopy: Boolean) = Unit
+        }
+        val vm = FeedViewModel(
+            StubRepository { feedResponse(listOf(menu("a"))) },
+            RecordingTracker(), MutableStateFlow(FeedFilters()), { serverNow },
+            cache = MemoryCache(), online = connection, pilot = onlineOnly,
+        )
+        advanceUntilIdle()
+
+        connection.value = false
+        advanceUntilIdle()
+
+        // Samuel's control group never sees the saved copy, not even in the elevator
+        assertNull((vm.state.value as FeedUiState.Content).savedAt)
     }
 
     private class MemoryCache : FeedCache {

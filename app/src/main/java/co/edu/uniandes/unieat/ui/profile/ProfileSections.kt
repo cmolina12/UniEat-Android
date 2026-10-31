@@ -46,7 +46,7 @@ import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import java.time.Instant
 
-/** Student or restaurant: state of their establishments and the request form. */
+/** Student or restaurant: status of their establishments and the request form. */
 @Composable
 fun EstablishmentsSection(vm: EstablishmentsViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -132,7 +132,7 @@ private fun RequestForm(state: EstablishmentsUiState, vm: EstablishmentsViewMode
     }
 }
 
-/** Pin of the establishment: from the address or the GPS, then the owner taps the map to fix it. */
+/** Pin from the address or the GPS, then the owner taps the map to fix it. */
 @Composable
 private fun PinPicker(state: EstablishmentsUiState, vm: EstablishmentsViewModel) {
     val context = LocalContext.current
@@ -148,7 +148,7 @@ private fun PinPicker(state: EstablishmentsUiState, vm: EstablishmentsViewModel)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label("Ubicación del local")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Stays enabled offline: tapping it explains that the GPS and the map work without signal.
+            // stays enabled offline, tapping it explains that GPS and the map work without signal
             val canSearch = !state.geocoding && state.form.address.isNotBlank()
             OutlinedButton(onClick = vm::findAddress, enabled = canSearch) {
                 Text(if (state.geocoding) "Buscando…" else "Buscar dirección", color = ink(canSearch), fontSize = 13.sp)
@@ -171,7 +171,7 @@ private fun PinPicker(state: EstablishmentsUiState, vm: EstablishmentsViewModel)
     }
 }
 
-/** Admin: establishment requests. Approving one turns its owner into a restaurant. */
+/** Admin: establishment requests. Approving makes the owner a restaurant. */
 @Composable
 fun AdminApprovalsSection(vm: AdminViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -203,7 +203,7 @@ fun AdminApprovalsSection(vm: AdminViewModel) {
     }
 }
 
-/** Admin: grant or take back the admin role. Restaurants are enabled by approving their request. */
+/** Admin: give or remove the admin role. Restaurants come from approving their request. */
 @Composable
 fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -256,10 +256,10 @@ fun AdminRolesSection(vm: AdminViewModel, currentUserId: String?) {
     }
 }
 
-/** Text colors are set by hand here, so a disabled button must also look disabled (grayed out). */
+/** Colors are set by hand here, so a disabled button has to look gray too. */
 private fun ink(enabled: Boolean) = if (enabled) Palette.Ink else Palette.Ink.copy(alpha = 0.4f)
 
-/** "Sin conexión · solicitudes guardadas a las 10:35 p. m." or just "Sin conexión" when nothing was saved. */
+/** "Sin conexión · solicitudes guardadas a las 10:35 p. m.", or just "Sin conexión" if nothing was saved. */
 private fun savedNotice(what: String, savedAt: Instant?): String =
     if (savedAt != null) "Sin conexión · $what a las ${SpanishPresentation.time(savedAt)}" else "Sin conexión"
 
