@@ -102,6 +102,7 @@ class WaitMeasurementViewModel(
                     arrivalCache.evictAll()
                 }
             }
+            tryAgain(context)
         }
     }
 
@@ -124,6 +125,11 @@ class WaitMeasurementViewModel(
                     Toast.makeText(context.applicationContext, "Tu medición de espera se envió", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: ApiException) {
+                if (e.code == ApiException.OFFLINE) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context.applicationContext, "Sin señal: tu medición quedó guardada y se enviará al abrir un menú con conexión", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
