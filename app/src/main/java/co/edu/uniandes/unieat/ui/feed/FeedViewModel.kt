@@ -116,7 +116,11 @@ class FeedViewModel(
     private suspend fun markAsSavedCopy() {
         val live = _state.value as? FeedUiState.Content ?: return
         if (live.savedAt != null) return
-        val saved = cache?.load(sharedFilters.value) ?: return
+        // same rules as a load: no copy past 24 h, and none for the pilot's online-only group
+        val saved = cache?.load(sharedFilters.value)
+            ?.takeIf { FeedCachePolicy.isEligible(it, deviceClock()) }
+            ?.let { FeedCachePolicy.of(pilot?.variant()).copyWhenOffline(it) }
+            ?: return
         // a new load may have started meanwhile, then it owns the state
         if (_state.value === live) _state.value = savedCopy(saved)
     }
