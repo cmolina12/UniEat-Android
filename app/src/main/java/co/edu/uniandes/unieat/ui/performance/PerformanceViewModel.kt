@@ -14,6 +14,7 @@ import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.pilot.CachePilotReport
 import co.edu.uniandes.unieat.data.pilot.CachePilotRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.repository.MenuRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import androidx.collection.SparseArrayCompat
@@ -49,6 +50,7 @@ sealed interface PerformanceUiState {
         val refreshing: Boolean = false,
         /** BQ-13 (Samuel): cache pilot comparison; admins only, null if it could not be loaded. */
         val cachePilot: CachePilotReport? = null,
+        val lineCongestion: List<CongestionRow>? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -80,6 +82,7 @@ class PerformanceViewModel(
     private val clock: () -> Instant = Instant::now,
     /** BQ-13 (Samuel): optional card, like BQ-01; its failure never hides the rest of the dashboard. */
     private val cachePilot: CachePilotRepository? = null,
+    private val menus: MenuRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
@@ -144,10 +147,21 @@ class PerformanceViewModel(
                     val completeness = async { locationCompleteness(days) }
                     // BQ-13 (Samuel): a fifth child coroutine on IO, in parallel with the other four.
                     val pilot = async { if (role == ROLE_ADMIN) cachePilotReport(days) else null }
+                    val congestion = async {
+                        if (role == ROLE_ADMIN && menus != null) {
+                            runCatching {
+                                val feed = menus.feedForDashboard()
+                                lineCongestion(feed.menus, feed.serverNow)
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
+                    }
                     // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
                     PerformanceUiState.Content(
                         summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await(),
                         cachePilot = pilot.await(),
+                        lineCongestion = congestion.await(),
                     )
                 }
                 byPeriod.put(days, content)
@@ -242,6 +256,7 @@ class PerformanceViewModel(
                     snapshots = app.container.performanceSnapshots,
                     online = app.container.connectivity.online,
                     cachePilot = app.container.cachePilotRepository,
+                    menus = app.container.menuRepository,
                 )
             }
         }

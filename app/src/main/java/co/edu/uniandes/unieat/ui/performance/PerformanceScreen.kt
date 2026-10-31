@@ -132,6 +132,7 @@ private fun PerformanceContent(
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
                 state.cachePilot?.let { CachePilotBqCard(it) }
+                state.lineCongestion?.let { LineCongestionBqCard(it) }
             }
         }
     }
@@ -289,6 +290,27 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
 }
 
 private const val BQ10_LABEL_WEIGHT = 1.4f
+
+@Composable
+private fun LineCongestionBqCard(rows: List<CongestionRow>) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-15 · Filas más largas por zona y precio", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        if (rows.isEmpty()) {
+            Text("Sin datos de fila en este momento", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            TableRow(listOf("Zona · precio", "Menús", "Fila prom. (min)"), header = true)
+            rows.forEach { row ->
+                TableRow(listOf("${row.area} · ${row.priceRange}", "${row.menus}", "${row.averageWaitMinutes}"))
+            }
+        }
+        Text(
+            "El promedio mezcla la mediana reciente (3 o más reportes en 30 minutos) con lo habitual a esta hora. " +
+                "Lo habitual incluye reportes de demostración marcados [demo-bq07], que no son observaciones reales.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 /**
  * Samuel — BQ-13 (Type 1 + Type 3): cache-enabled vs online-only, compared only inside the same connection

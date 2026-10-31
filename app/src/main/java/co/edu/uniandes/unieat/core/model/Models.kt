@@ -39,6 +39,7 @@ data class DailyMenu(
     val waitMinutes: Int? = null,
     val waitSampleCount: Int = 0,
     @Serializable(InstantSerializer::class) val waitNewestReportAt: Instant? = null,
+    val waitHistoricalMinutes: Int? = null,
     val pendingReports: Int = 0,
     val relevanceScore: Int = 0,
     val travelMinutes: Int? = null,
