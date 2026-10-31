@@ -254,6 +254,20 @@ class MenuDetailViewModelTest {
         assertEquals(EventKind.SELECTION, tracker.events.last().kind)
     }
 
+    @Test
+    fun choosingShowsTheConfirmationAndASecondTapIsNotCountedAgain() = runTest(dispatcher) {
+        val tracker = RecordingTracker()
+        val vm = MenuDetailViewModel("m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports()) { serverNow }
+        advanceUntilIdle()
+        assertFalse(vm.selected.value)
+
+        vm.onSelect()
+        vm.onSelect()
+
+        assertTrue(vm.selected.value)
+        assertEquals(1, tracker.events.count { it.kind == EventKind.SELECTION })
+    }
+
     private fun apiError(code: String, message: String, status: Int) = ApiException(ApiError(code, message), status)
 
     private fun menu() = DailyMenu(
