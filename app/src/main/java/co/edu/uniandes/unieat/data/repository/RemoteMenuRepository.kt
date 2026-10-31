@@ -16,6 +16,9 @@ class RemoteMenuRepository(private val api: ApiClient) : MenuRepository {
     override suspend fun feed(filters: FeedFilters): FeedResponse =
         api.get("feed", filters.toQuery())
 
+    override suspend fun feedForDashboard(): FeedResponse =
+        api.get("feed", mapOf("refresh" to "auto"))
+
     override suspend fun menu(id: String, automatic: Boolean): MenuDetailResponse =
         api.get("menus/$id", if (automatic) mapOf("refresh" to "auto") else emptyMap())
 
