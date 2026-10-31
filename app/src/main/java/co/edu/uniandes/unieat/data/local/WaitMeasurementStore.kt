@@ -24,8 +24,13 @@ private val PENDING_MENU_ID_KEY = stringPreferencesKey("pending_menu_id")
 
 private val PENDING_VERSION_KEY = intPreferencesKey("pending_version")
 
+private const val MAX_ARRIVAL_AGE_MILLIS = MAX_WAIT_MINUTES * 60_000L
+
 suspend fun saveArrival(context: Context, millis: Long, menuId: String, version: Int) {
     context.waitMeasurementDataStore.edit { prefs ->
+        val arrivedAt = prefs[ARRIVED_AT_KEY]
+        val fresh = arrivedAt != null && millis - arrivedAt < MAX_ARRIVAL_AGE_MILLIS
+        if (fresh && prefs[MENU_ID_KEY] == menuId && prefs[VERSION_KEY] == version) return@edit
         prefs[ARRIVED_AT_KEY] = millis
         prefs[MENU_ID_KEY] = menuId
         prefs[VERSION_KEY] = version
@@ -34,6 +39,12 @@ suspend fun saveArrival(context: Context, millis: Long, menuId: String, version:
 
 suspend fun readArrival(context: Context): Long? =
     context.waitMeasurementDataStore.data.first()[ARRIVED_AT_KEY]
+
+suspend fun hasFreshArrival(context: Context, menuId: String, now: Long): Boolean {
+    val prefs = context.waitMeasurementDataStore.data.first()
+    val arrivedAt = prefs[ARRIVED_AT_KEY] ?: return false
+    return prefs[MENU_ID_KEY] == menuId && now - arrivedAt < MAX_ARRIVAL_AGE_MILLIS
+}
 
 suspend fun clearArrival(context: Context) {
     context.waitMeasurementDataStore.edit { prefs -> prefs.remove(ARRIVED_AT_KEY) }

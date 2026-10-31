@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportBody
@@ -14,6 +17,7 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.local.waitMinutes
 import co.edu.uniandes.unieat.data.local.clearArrival
 import co.edu.uniandes.unieat.data.local.clearPendingMinutes
+import co.edu.uniandes.unieat.data.local.hasFreshArrival
 import co.edu.uniandes.unieat.data.local.readArrival
 import co.edu.uniandes.unieat.data.local.readMenuId
 import co.edu.uniandes.unieat.data.local.readPendingMenuId
@@ -27,9 +31,19 @@ import co.edu.uniandes.unieat.data.repository.ReportRepository
 
 class WaitMeasurementViewModel(private val reportRepository: ReportRepository) : ViewModel() {
 
+    private val _canFinish = MutableStateFlow(false)
+    val canFinish: StateFlow<Boolean> = _canFinish.asStateFlow()
+
     fun saveArrivalVM(context: android.content.Context, millis: Long, menuId: String, version: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             saveArrival(context, millis, menuId, version)
+            _canFinish.value = hasFreshArrival(context, menuId, System.currentTimeMillis())
+        }
+    }
+
+    fun refreshCanFinish(context: android.content.Context, menuId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _canFinish.value = hasFreshArrival(context, menuId, System.currentTimeMillis())
         }
     }
 
@@ -64,6 +78,7 @@ class WaitMeasurementViewModel(private val reportRepository: ReportRepository) :
     }
 
     fun finishMeasurement(context: android.content.Context) {
+        _canFinish.value = false
         viewModelScope.launch(Dispatchers.IO) {
             val arrival = readArrival(context)
             val menuId = readMenuId(context)
