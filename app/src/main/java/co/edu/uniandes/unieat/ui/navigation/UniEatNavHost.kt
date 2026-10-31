@@ -50,6 +50,8 @@ import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
 import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
 import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
 import co.edu.uniandes.unieat.ui.profile.AdminViewModel
+import co.edu.uniandes.unieat.ui.profile.CachePilotSection
+import co.edu.uniandes.unieat.ui.profile.CachePilotViewModel
 import co.edu.uniandes.unieat.ui.profile.EstablishmentsSection
 import co.edu.uniandes.unieat.ui.profile.EstablishmentsViewModel
 import co.edu.uniandes.unieat.ui.publish.PublishScreen
@@ -117,7 +119,10 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
     ) { padding ->
         NavHost(navController, startDestination = initialDestination, modifier = Modifier.padding(padding)) {
             composable<Login> {
-                val vm: LoginViewModel = viewModel(factory = simpleFactory { LoginViewModel(container.sessionManager) })
+                // The connectivity flow lets the login explain, before sending, that it needs signal (Samuel).
+                val vm: LoginViewModel = viewModel(
+                    factory = simpleFactory { LoginViewModel(container.sessionManager, container.connectivity.online) },
+                )
                 LoginScreen(vm = vm, demo = container.usesFakeData, onSignedIn = {
                     navController.navigate(Feed) { popUpTo<Login> { inclusive = true } }
                 })
@@ -204,6 +209,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                             )
                             EstablishmentsSection(establishments)
                         }
+                        // BQ-13 consent (Samuel), for every role: anybody who uses "Hoy" can join the pilot.
+                        val pilot: CachePilotViewModel = viewModel(factory = simpleFactory { CachePilotViewModel(container.cachePilot) })
+                        CachePilotSection(pilot)
                     },
                 )
             }
