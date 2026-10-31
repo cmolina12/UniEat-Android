@@ -80,7 +80,7 @@ class AppContainer(
         if (usesFakeData) FakeProfileRepository() else RemoteProfileRepository(apiClient)
     }
 
-    /** DataStore "unieat_settings": last GET /me, so the role (and tabs) survive opening offline. */
+    /** DataStore: last GET /me, so role and tabs work when opening offline. */
     val profileCache: ProfileCache? by lazy {
         if (usesFakeData) null else DataStoreProfileCache(context.settingsDataStore)
     }
@@ -105,10 +105,10 @@ class AppContainer(
 
     val connectivity: ConnectivityMonitor by lazy { ConnectivityMonitor(context) }
 
-    /** Menu details opened recently, in memory (LruCache of 20). */
+    /** Recently opened details in memory (LruCache, 20). */
     val menuDetailCache = MenuDetailCache()
 
-    /** Offline copy of the feed. Demo mode has no network, so it does not need one. */
+    /** Offline copy of the feed. Not needed in demo mode. */
     val feedCache: FeedCache? by lazy {
         if (usesFakeData) null else FileFeedCache(File(context.filesDir, "feed-cache"))
     }
@@ -136,18 +136,18 @@ class AppContainer(
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Local relational database (Room). Today it holds the reports waiting for a connection. */
+    /** Room database. For now it has the reports waiting for signal. */
     private val database: UniEatDatabase by lazy { UniEatDatabase.build(context) }
 
     val reportScheduler: FlushScheduler by lazy { WorkManagerReportScheduler(context) }
 
-    /** DataStore "unieat_settings": the Rendimiento period. */
+    /** DataStore: Rendimiento period. */
     val performancePreferences: PerformancePreferences by lazy { DataStorePerformancePreferences(context.settingsDataStore) }
 
     /** Last Rendimiento result per role and period, for offline. */
     val performanceSnapshots: PerformanceSnapshots by lazy { FilePerformanceSnapshots(File(context.filesDir, "performance")) }
 
-    /** Saved lists and unsent drafts of Publicar, Mis establecimientos and the admin sections. */
+    /** Saved lists and drafts of Publicar, Mis establecimientos and Admin. */
     val offlineStore: OfflineStore? by lazy {
         if (usesFakeData) null else FileOfflineStore(File(context.filesDir, "offline"))
     }
@@ -169,15 +169,15 @@ class AppContainer(
     }
 
     init {
-        // The saved feed belongs to the user who loaded it.
+        // the saved feed belongs to the user who loaded it
         appScope.launch {
             sessionManager.state.filterIsInstance<AuthState.SignedOut>().collect {
                 feedCache?.clear()
                 menuDetailCache.clear()
-                // Waiting reports would otherwise be sent with the next account's session.
+                // otherwise queued reports would go out with the next account's session
                 reportQueue.clear()
                 performanceSnapshots.clear()
-                // Drafts and lists of one restaurant or admin must never show up for the next account.
+                // one account's drafts and lists can't show up for the next one
                 offlineStore?.clear()
                 profileCache?.clear()
             }

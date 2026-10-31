@@ -103,7 +103,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
             if (profileState is AppProfileState.Error && authState is AuthState.SignedIn) {
                 Surface {
                     Row(
-                        // Below the status bar: the system takes every touch drawn under it.
+                        // below the status bar, the system takes the touches drawn under it
                         modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -192,7 +192,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                                         container.establishmentRepository,
                                         container.locationRepository,
                                         container.addressGeocoder,
-                                        // An approval can turn the account into a restaurant: tabs and role refresh.
+                                        // an approval can turn the account into a restaurant, refresh tabs and role
                                         onAccountChanged = {
                                             shell.retryProfile()
                                             vm.refresh()
@@ -232,11 +232,7 @@ private fun TabBar(navController: NavHostController, destination: NavDestination
     }
 }
 
-/**
- * Navigates only while [from] is the screen on top and active. A quick second tap arrives while the
- * first navigation is already under way (the list is no longer RESUMED), so it is ignored instead of
- * stacking a second detail and counting a second detail_open event.
- */
+/** Only navigates if [from] is still on top (RESUMED). A fast second tap is ignored, so no double detail or detail_open. */
 private fun NavHostController.navigateFrom(from: NavBackStackEntry, route: Any) {
     if (from.lifecycle.currentState == Lifecycle.State.RESUMED) navigate(route)
 }
@@ -248,10 +244,7 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
     override fun <T : ViewModel> create(modelClass: Class<T>): T = builder() as T
 }
 
-/**
- * Context-aware UX, same tabs as iOS: a restaurant gets "Publicar" in place of "Elige por mí";
- * performance is restaurant/admin. Backend authorization remains authoritative.
- */
+/** Tabs by role, like iOS: restaurants get "Publicar" instead of "Elige por mí". The backend still checks access. */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
     Tab.RECOMMEND -> demo || role != "restaurant"
     Tab.PUBLISH -> demo || role == "restaurant"

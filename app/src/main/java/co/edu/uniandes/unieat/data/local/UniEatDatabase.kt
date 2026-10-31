@@ -5,10 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-/**
- * The app's local relational database (SQLite through Room), stored privately in the app's data folder.
- * Version 1 has one table; a new table or column means raising the version and adding a migration.
- */
+/** Local SQLite database through Room. Version 1, one table. A new table or column = new version + migration. */
 @Database(entities = [PendingReport::class], version = 1, exportSchema = false)
 abstract class UniEatDatabase : RoomDatabase() {
     abstract fun pendingReports(): PendingReportDao

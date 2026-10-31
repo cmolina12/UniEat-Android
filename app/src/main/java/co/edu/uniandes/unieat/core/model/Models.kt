@@ -85,7 +85,7 @@ enum class ReportKind {
     @SerialName("location") LOCATION,
     @SerialName("accurate") ACCURATE,
     @SerialName("arrival") ARRIVAL,
-    /** BQ-10: the student went and could not find the place. An observation, never pending. */
+    /** BQ-10: went and couldn't find the place. An observation, never pending. */
     @SerialName("not_found") NOT_FOUND,
 }
 
@@ -144,14 +144,14 @@ data class LocationGuidanceSnapshot(
     val coverage: LocationCoverage = LocationCoverage(),
 )
 
-/** BQ-10, one side of the comparison: complete (pin + photo + entrance) or incomplete establishments. */
+/** BQ-10, one group: complete (pin + photo + entrance) or incomplete establishments. */
 @Serializable
 data class CompletenessGroup(
     val establishments: Int = 0,
     val locationOpens: Int = 0,
     val arrivals: Int = 0,
     val notFoundReports: Int = 0,
-    /** notFound / (arrivals + notFound), computed by the backend; null while nobody answered. */
+    /** notFound / (arrivals + notFound), from the backend. null if nobody answered. */
     val notFoundShare: Double? = null,
 )
 
@@ -161,7 +161,7 @@ data class CompletenessGroups(
     val incomplete: CompletenessGroup = CompletenessGroup(),
 )
 
-/** A restaurant's own establishment and the references it still lacks ("pin", "photo", "entrance"). */
+/** A restaurant's own place and what it's missing ("pin", "photo", "entrance"). */
 @Serializable
 data class OwnCompleteness(
     val establishmentId: String,

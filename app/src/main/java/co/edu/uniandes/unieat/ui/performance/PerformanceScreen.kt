@@ -124,7 +124,7 @@ private fun PerformanceContent(
                     )
                 }
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
-                // BQ-01 is the admin's (all devices); a restaurant has no access to it.
+                // BQ-01 is admin only (all devices)
                 if (!state.ownEstablishmentsOnly) FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
@@ -243,10 +243,7 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstabl
     }
 }
 
-/**
- * Camilo — BQ-10: do complete establishments (pin + photo + entrance) get more arrivals and fewer
- * "no encontré el local" reports than incomplete ones? The backend counts and divides; this only shows it.
- */
+/** BQ-10 (Camilo): complete places (pin + photo + entrance) vs incomplete ones. The backend does the math, this only shows it. */
 @Composable
 private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
     val complete = snapshot.groups.complete
@@ -264,7 +261,7 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
             "Todos los establecimientos · todas las plataformas · últimos ${snapshot.periodDays} días",
             style = MaterialTheme.typography.bodySmall,
         )
-        // Two value columns instead of BQ-05's three: they get more room so the long headers fit.
+        // two value columns instead of three, so the long headers fit
         TableRow(listOf("", "Completos", "Incompletos"), header = true, labelWeight = BQ10_LABEL_WEIGHT)
         rows.forEach { (label, pick) -> TableRow(listOf(label, pick(complete), pick(incomplete)), labelWeight = BQ10_LABEL_WEIGHT) }
         Text(
@@ -274,7 +271,7 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Restaurants: what each of their places still lacks to move to the complete group.
+        // restaurants: what each of their places is missing to be complete
         snapshot.ownEstablishments.forEach { own ->
             Text(
                 if (own.missing.isEmpty()) "${own.name}: tiene todas las referencias."
@@ -302,7 +299,7 @@ private fun TableRow(cells: List<String>, header: Boolean = false, labelWeight: 
         cells.forEachIndexed { i, cell ->
             Text(
                 cell,
-                // The gap keeps right-aligned headers like "Completos" and "Incompletos" from touching.
+                // gap so "Completos" and "Incompletos" don't touch
                 modifier = Modifier.weight(if (i == 0) labelWeight else 1f).padding(start = if (i == 0) 0.dp else 6.dp),
                 textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
                 style = MaterialTheme.typography.bodySmall,

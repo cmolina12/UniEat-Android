@@ -41,9 +41,9 @@ sealed interface PerformanceUiState {
         val ownEstablishmentsOnly: Boolean = false,
         val locationGuidance: LocationGuidanceSnapshot? = null,
         val locationCompleteness: LocationCompletenessSnapshot? = null,
-        /** Set when this is the last result saved on the phone: offline, or while [refreshing]. */
+        /** When the shown copy was saved (offline or while refreshing). */
         val savedAt: Instant? = null,
-        /** The saved result is shown while the request is still on its way (slow signal). */
+        /** Saved copy shown while the request is still running (slow signal). */
         val refreshing: Boolean = false,
     ) : PerformanceUiState
 
@@ -65,16 +65,13 @@ class PerformanceViewModel(
     private val feedLoads: FeedLoadRepository? = null,
     private val role: String? = null,
     private val showLocationGuidance: Boolean = false,
-    /** Where the requests run. Tests pass their own dispatcher so they control the timing. */
+    /** Tests pass their own dispatcher. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
-    /** DataStore: the 7/28-day choice survives closing the app. */
+    /** DataStore: remembers 7 or 28 days. */
     private val preferences: PerformancePreferences? = null,
     /** Last result per role and period, for offline. */
     private val snapshots: PerformanceSnapshots? = null,
-    /**
-     * Validated-connection changes. Losing the signal labels the numbers on screen with the time they were saved;
-     * coming back online replaces the saved copy with fresh numbers.
-     */
+    /** Offline: the numbers get their saved time. Back online: reload. */
     online: Flow<Boolean>? = null,
     private val clock: () -> Instant = Instant::now,
 ) : ViewModel() {
@@ -86,23 +83,18 @@ class PerformanceViewModel(
     val days: StateFlow<Int> = _days.asStateFlow()
 
     /**
-     * Last result of each period in memory, keyed by the number of days (7 or 28). Switching back to a
-     * period shows its numbers at once while the fresh ones load (cache then network).
-     *
-     * SparseArrayCompat maps int keys to objects with two plain arrays: a sorted int[] of keys (found by
-     * binary search) and an Object[] of values at the same index. Unlike HashMap<Int, …> it never boxes
-     * the key into an Integer object and needs no entry objects, so it uses less memory; binary search is
-     * O(log n) instead of O(1), which does not matter for 2 keys (it is meant for collections < 1000).
-     * Initial capacity 2: exactly the two periods the backend supports, so it never has to grow.
+     * Last result per period (7 or 28), so switching back is instant.
+     * SparseArrayCompat: int keys without boxing, sorted int[] + binary search.
+     * Capacity 2 = the two periods the backend has, it never grows.
      */
     private val byPeriod = SparseArrayCompat<PerformanceUiState.Content>(PERIODS)
 
-    /** The request in flight. A new period cancels it, so a slow old answer can never overwrite the new one. */
+    /** Cancelled when the period changes, so an old answer can't overwrite the new one. */
     private var loadJob: Job? = null
 
     init {
         viewModelScope.launch {
-            // The saved period is read before the first request, so the dashboard opens as the user left it.
+            // read the saved period before the first request
             preferences?.let { _days.value = it.days.first() }
             load()
         }
@@ -110,7 +102,7 @@ class PerformanceViewModel(
             online.collect { isOnline ->
                 val current = _state.value
                 if (!isOnline) {
-                    // The numbers on screen were saved to disk when they arrived; that copy carries the time.
+                    // they were saved to disk when they arrived, that copy has the time
                     if (current is PerformanceUiState.Content && current.savedAt == null) {
                         val saved = savedCopy(_days.value)
                         if (saved != null && _state.value === current) _state.value = saved
@@ -125,17 +117,15 @@ class PerformanceViewModel(
     }
 
     /**
-     * Fetches the metrics for the selected period. The outer coroutine runs on Main (viewModelScope);
-     * inside it, withContext moves to IO and four child coroutines (async) ask the backend at the same
-     * time. The screen waits for the slowest one instead of the sum of all four, and the result is
-     * published back on Main.
+     * Main -> withContext(IO) -> 4 async requests at the same time.
+     * We wait for the slowest one, not the sum. The result goes back to Main.
      */
     fun load() {
         val days = _days.value
         _state.value = byPeriod[days] ?: PerformanceUiState.Loading
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            // Nothing in memory for this period: the result saved on disk appears while the request runs.
+            // nothing in memory: show the disk copy while the request runs
             if (_state.value == PerformanceUiState.Loading) {
                 savedCopy(days)?.let { _state.value = it.copy(refreshing = true) }
             }
@@ -146,7 +136,7 @@ class PerformanceViewModel(
                     val feedLoad = async { if (role == ROLE_ADMIN) feedLoadReport() else null }
                     val guidance = async { locationGuidance(days, restaurant) }
                     val completeness = async { locationCompleteness(days) }
-                    // Only the summary can fail the screen; the BQ cards are optional (null if they fail).
+                    // only the summary can fail the screen, the BQ cards are optional
                     PerformanceUiState.Content(summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await())
                 }
                 byPeriod.put(days, content)
@@ -163,7 +153,7 @@ class PerformanceViewModel(
         }
     }
 
-    /** Keeps this result for offline. A failed save is not worth an error on screen. */
+    /** Saved for offline. If saving fails we just skip it. */
     private suspend fun save(content: PerformanceUiState.Content, days: Int) {
         val store = snapshots ?: return
         runCatching {
@@ -188,11 +178,7 @@ class PerformanceViewModel(
 
     private val roleKey: String get() = role ?: "none"
 
-    /**
-     * BQ-01 always looks at the last seven days, whatever period the other metrics use. Only admins ask
-     * for it: the endpoint is admin-only, and a restaurant would get this phone's empty local summary
-     * ("no loads") instead of a real answer.
-     */
+    /** BQ-01: admin only (the endpoint is admin-only) and always 7 days. */
     private suspend fun feedLoadReport(): FeedLoadReport? =
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
@@ -203,7 +189,7 @@ class PerformanceViewModel(
         }.getOrNull()
     }
 
-    /** BQ-10 (Camilo): shown with BQ-05, to the same roles; its failure never hides the rest. */
+    /** BQ-10: same roles as BQ-05. If it fails the rest still shows. */
     private suspend fun locationCompleteness(days: Int): LocationCompletenessSnapshot? {
         if (!showLocationGuidance) return null
         return runCatching { repository.locationCompleteness(days) }.getOrNull()

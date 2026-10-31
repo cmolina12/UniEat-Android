@@ -11,9 +11,8 @@ import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 
 /**
- * Calls [onDismiss] once a sheet that was shown ends up hidden. With Material3 1.3.1 the system back
- * gesture (Android 14+) slides a ModalBottomSheet away without calling onDismissRequest, so the caller
- * never removes it and its invisible window keeps covering the screen and swallowing every touch.
+ * Calls onDismiss once a shown sheet ends up hidden. With Material3 1.3.1 the back gesture
+ * (Android 14+) hides the sheet without onDismissRequest, and its invisible window blocks every touch.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

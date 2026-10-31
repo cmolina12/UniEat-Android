@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 sealed interface ProfileState {
     data object Loading : ProfileState
-    /** [saved]: the profile stored on this device, shown because GET /me could not reach the server. */
+    /** saved: profile from this device, shown because GET /me couldn't reach the server. */
     data class Content(val me: MeResponse, val saved: Boolean = false) : ProfileState
     data class Error(val message: String) : ProfileState
 }
@@ -25,7 +25,7 @@ sealed interface ProfileState {
 class ProfileViewModel(
     private val repository: ProfileRepository,
     private val sessions: SessionManager,
-    /** Last GET /me saved by the app shell (DataStore), so Perfil and its sections open offline. */
+    /** Last GET /me saved by the app shell (DataStore), so Perfil opens offline. */
     private val cache: ProfileCache? = null,
     /** Validated-connection changes: a saved or failed profile reloads when the signal returns. */
     online: Flow<Boolean> = emptyFlow(),
@@ -62,13 +62,13 @@ class ProfileViewModel(
         return cache?.load(userId)?.let { ProfileState.Content(it, saved = true) }
     }
 
-    /** Reloads without going through Loading, so the screen does not blink (after "Actualizar estado"). */
+    /** Reloads without Loading so the screen doesn't blink (after "Actualizar estado"). */
     fun refresh() {
         viewModelScope.launch {
             try {
                 _state.value = ProfileState.Content(repository.me())
             } catch (_: Exception) {
-                // The current profile stays; the establishments section shows its own message.
+                // keep the current profile, the establishments section shows its own message
             }
         }
     }

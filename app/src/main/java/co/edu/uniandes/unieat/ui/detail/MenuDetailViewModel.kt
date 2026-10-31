@@ -55,13 +55,13 @@ import java.time.Instant
 sealed interface MenuDetailUiState {
     data object Loading : MenuDetailUiState
 
-    /** [savedAt] is set when the device is offline and the menu comes from the last saved feed. */
+    /** savedAt: offline, the menu comes from the last saved copy. */
     data class Content(
         val menu: DailyMenu,
         val clockOffset: Duration,
         val savedAt: Instant? = null,
         val reports: List<MenuReport> = emptyList(),
-        /** The feed's saved copy is shown while the request is still on its way (slow signal). */
+        /** Feed copy shown while the request is still running (slow signal). */
         val refreshing: Boolean = false,
     ) : MenuDetailUiState {
         val location: LocationGuidance = locationGuidance(menu, reports)
@@ -80,7 +80,7 @@ sealed interface ReportSubmission {
     data class Sent(val message: String, val pending: Boolean) : ReportSubmission
     data class Failed(val message: String) : ReportSubmission
 
-    /** No internet: the report waits in the local database and is sent when the connection comes back. */
+    /** No internet: the report waits in Room and goes out when the connection is back. */
     data class Queued(val message: String) : ReportSubmission
 }
 
@@ -94,7 +94,7 @@ sealed interface DistanceStatus {
     data object LocationOff : DistanceStatus
     data object Searching : DistanceStatus
 
-    /** Still listening, but no fix after [MenuDetailViewModel.SLOW_FIX_MILLIS] (indoors, weak GPS). */
+    /** Still listening but no fix after SLOW_FIX_MILLIS (indoors, weak GPS). */
     data object SlowFix : DistanceStatus
     data object Unavailable : DistanceStatus
     data class Known(
@@ -129,14 +129,11 @@ class MenuDetailViewModel(
     val isDemo: Boolean = false,
     val fixtures: List<DemoFixture> = emptyList(),
     private val feedCache: FeedCache? = null,
-    /**
-     * Validated-connection changes. Losing the signal shows the detail on screen as a saved copy with its time;
-     * going back online reloads an offline error or a saved copy.
-     */
+    /** Offline: the detail on screen becomes a saved copy with its time. Back online: reload. */
     online: Flow<Boolean>? = null,
-    /** Offline reports (Room). Without it, a report made offline is lost and the student is told so. */
+    /** Offline reports (Room). Without it an offline report is lost and the student is told. */
     private val reportQueue: ReportQueue? = null,
-    /** Details opened recently (LruCache in memory): a menu opened again shows at once. */
+    /** Recently opened details (LruCache), a menu opened again shows at once. */
     private val memoryCache: MenuDetailCache? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
@@ -165,7 +162,7 @@ class MenuDetailViewModel(
     private val _report = MutableStateFlow<ReportSubmission>(ReportSubmission.Idle)
     val report: StateFlow<ReportSubmission> = _report.asStateFlow()
 
-    /** Reports of this menu still waiting for a connection; Room's Flow updates it when the worker sends them. */
+    /** Reports of this menu waiting for signal. Room's Flow updates it when the worker sends them. */
     val queuedReports: StateFlow<Int> = (reportQueue?.pendingFor(menuId) ?: flowOf(0))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -176,7 +173,7 @@ class MenuDetailViewModel(
         if (online != null) viewModelScope.launch {
             online.collect { isOnline ->
                 if (!isOnline) {
-                    // The detail on screen is in the LruCache with the time it arrived: shown as a saved copy.
+                    // it's in the LruCache with the time it arrived, show it as a saved copy
                     val live = _state.value as? MenuDetailUiState.Content
                     if (live != null && live.savedAt == null) {
                         memoryCache?.get(menuId)?.let { _state.value = it.toContent(saved = true) }
@@ -192,10 +189,7 @@ class MenuDetailViewModel(
         }
     }
 
-    /**
-     * Cache then network: a detail still in the LruCache is shown at once, without a spinner, and the
-     * request then replaces it with the server's current version (and refreshes the cache).
-     */
+    /** Cache then network: LruCache hit shows at once, then the request replaces it and refreshes the cache. */
     fun load() {
         val cached = memoryCache?.get(menuId)
         _state.value = cached?.let {
@@ -203,7 +197,7 @@ class MenuDetailViewModel(
             it.toContent()
         } ?: MenuDetailUiState.Loading
         viewModelScope.launch {
-            // Not in memory: the feed's saved copy (if any) appears at once instead of a spinner.
+            // not in memory: show the feed's saved copy instead of a spinner
             val fromFeed = if (cached == null) feedCache?.findMenu(menuId) else null
             if (fromFeed != null && _state.value == MenuDetailUiState.Loading) {
                 _state.value = fromFeed.toContent().copy(refreshing = true)
@@ -216,12 +210,12 @@ class MenuDetailViewModel(
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiException.GONE -> {
-                        // Closed or expired on the server: the cached copy must not come back.
+                        // closed or expired on the server: drop it from the cache
                         memoryCache?.remove(menuId)
                         MenuDetailUiState.Gone(e.error.message)
                     }
                     ApiException.AUTH_REQUIRED -> MenuDetailUiState.SessionExpired
-                    // Offline, the cached detail (with its reports) beats the feed's copy; it says how old it is.
+                    // offline: the cached detail (has the reports) wins over the feed copy
                     ApiException.OFFLINE -> cached?.toContent(saved = true) ?: (fromFeed ?: feedCache?.findMenu(menuId))?.let { saved ->
                         trackOpen(saved.menu)
                         saved.toContent()
@@ -241,7 +235,7 @@ class MenuDetailViewModel(
         savedAt = savedAt,
     )
 
-    /** The server clock is estimated from when the copy arrived, as with the saved feed. */
+    /** Server clock estimated from when the copy arrived, same as the saved feed. */
     private fun MenuDetailCache.Entry.toContent(saved: Boolean = false) = MenuDetailUiState.Content(
         response.menu,
         clockOffset = savedClockOffset(receivedAt, response.serverNow, deviceClock()),
@@ -304,7 +298,7 @@ class MenuDetailViewModel(
             note = note.trim().ifEmpty { null },
             observedWaitMinutes = observedWaitMinutes.takeIf { kind == ReportKind.LONG_LINE },
         )
-        // Main: the coroutine starts here and every _report update happens here, so the sheet redraws safely.
+        // Main: _report is always updated here so the sheet redraws safely
         viewModelScope.launch {
             _report.value = try {
                 val response = reportRepository.submit(body)
@@ -315,7 +309,7 @@ class MenuDetailViewModel(
             } catch (e: ApiException) {
                 val queue = reportQueue
                 if (e.code == ApiException.OFFLINE && queue != null) {
-                    // IO: ReportQueue.enqueue writes the row to Room on Dispatchers.IO, then we are back on Main.
+                    // IO: enqueue writes to Room on Dispatchers.IO, then back on Main
                     queue.enqueue(body)
                     if (kind == ReportKind.ARRIVAL) recordArrival("report_sheet")
                     ReportSubmission.Queued("Sin conexión: guardamos tu reporte y lo enviaremos solo cuando vuelva la señal.")
@@ -395,7 +389,7 @@ class MenuDetailViewModel(
                     app.container.eventTracker,
                     app.container.reportRepository,
                     isDemo = demo,
-                    // The seed menus only exist in a local `supabase start`, never on the shared project.
+                    // seed menus only exist in a local supabase start, not on the shared project
                     fixtures = when {
                         demo -> DevDataSource.fixtures
                         app.container.config.isLocal -> DevDataSource.seedFixtures
