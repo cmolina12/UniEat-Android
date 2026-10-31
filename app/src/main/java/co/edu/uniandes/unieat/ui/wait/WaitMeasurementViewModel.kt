@@ -22,6 +22,8 @@ import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.local.MAX_ARRIVAL_AGE_MILLIS
+import co.edu.uniandes.unieat.data.local.WaitRecord
+import co.edu.uniandes.unieat.data.local.WaitRecordDao
 import co.edu.uniandes.unieat.data.local.waitMinutes
 import co.edu.uniandes.unieat.data.local.clearArrival
 import co.edu.uniandes.unieat.data.local.clearPendingMinutes
@@ -40,6 +42,7 @@ import co.edu.uniandes.unieat.data.repository.ReportRepository
 class WaitMeasurementViewModel(
     private val reportRepository: ReportRepository,
     private val arrivalCache: LruCache<String, Long>,
+    private val waitRecords: WaitRecordDao,
 ) : ViewModel() {
 
     private val cacheMutex = Mutex()
@@ -91,6 +94,7 @@ class WaitMeasurementViewModel(
                 val minutes = calculateWaitMinutes(arrival, System.currentTimeMillis())
                 if (minutes != null) {
                     savePendingMinutes(context, minutes, menuId, version)
+                    waitRecords.insert(WaitRecord(menuId = menuId, minutes = minutes, measuredAt = System.currentTimeMillis()))
                 }
                 cacheMutex.withLock {
                     clearArrival(context)
@@ -126,7 +130,7 @@ class WaitMeasurementViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                WaitMeasurementViewModel(app.container.reportRepository, app.container.arrivalCache)
+                WaitMeasurementViewModel(app.container.reportRepository, app.container.arrivalCache, app.container.waitRecords)
             }
         }
     }

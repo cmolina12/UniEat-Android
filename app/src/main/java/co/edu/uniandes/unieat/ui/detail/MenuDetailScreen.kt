@@ -224,7 +224,7 @@ private fun MenuDetailContent(
                 recommendation?.let { RecommendationCard(it) }
                 MenuBody(
                     state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
-                    queuedReports, selected,
+                    queuedReports, selected, canFinishWait, onFinishWait,
                 )
             }
             is MenuDetailUiState.Gone -> StatusMessage(
@@ -264,6 +264,8 @@ private fun MenuBody(
     onReport: () -> Unit,
     queuedReports: Int,
     selected: Boolean,
+    canFinishWait: Boolean = false,
+    onFinishWait: () -> Unit = {},
 ) {
     val active = menu.isActive(now)
 
