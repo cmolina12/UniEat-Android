@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat
 
 import android.content.Context
+import androidx.collection.LruCache
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
@@ -107,6 +108,9 @@ class AppContainer(
 
     /** Menu details opened recently, in memory (LruCache of 20). */
     val menuDetailCache = MenuDetailCache()
+
+    /** Arrival time per menu, 0L when there is none. 20 because the campus has few restaurants (17 in the seeds, about 8 active). */
+    val arrivalCache = LruCache<String, Long>(20)
 
     /** Offline copy of the feed. Demo mode has no network, so it does not need one. */
     val feedCache: FeedCache? by lazy {

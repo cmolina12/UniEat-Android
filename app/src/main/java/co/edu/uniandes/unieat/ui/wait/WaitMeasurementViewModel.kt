@@ -1,5 +1,7 @@
 package co.edu.uniandes.unieat.ui.wait
 
+import android.util.Log
+import androidx.collection.LruCache
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -11,9 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
+import co.edu.uniandes.unieat.data.local.MAX_ARRIVAL_AGE_MILLIS
 import co.edu.uniandes.unieat.data.local.waitMinutes
 import co.edu.uniandes.unieat.data.local.clearArrival
 import co.edu.uniandes.unieat.data.local.clearPendingMinutes
@@ -29,34 +34,40 @@ import co.edu.uniandes.unieat.data.local.savePendingMinutes
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.ReportRepository
 
-class WaitMeasurementViewModel(private val reportRepository: ReportRepository) : ViewModel() {
+class WaitMeasurementViewModel(
+    private val reportRepository: ReportRepository,
+    private val arrivalCache: LruCache<String, Long>,
+) : ViewModel() {
 
-    private val _canFinish = MutableStateFlow(false)
-    val canFinish: StateFlow<Boolean> = _canFinish.asStateFlow()
+    private val cacheMutex = Mutex()
+
+    private val canFinishState = MutableStateFlow(false)
+    val canFinish: StateFlow<Boolean> = canFinishState.asStateFlow()
 
     fun saveArrivalVM(context: android.content.Context, millis: Long, menuId: String, version: Int) {
         viewModelScope.launch(Dispatchers.IO) {
-            saveArrival(context, millis, menuId, version)
-            _canFinish.value = hasFreshArrival(context, menuId, System.currentTimeMillis())
+            cacheMutex.withLock {
+                saveArrival(context, millis, menuId, version)
+                arrivalCache.evictAll()
+                canFinishState.value = hasFreshArrival(context, menuId, System.currentTimeMillis())
+            }
         }
     }
 
     fun refreshCanFinish(context: android.content.Context, menuId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            _canFinish.value = hasFreshArrival(context, menuId, System.currentTimeMillis())
-        }
-    }
-
-    fun readArrivalVM(context: android.content.Context, callback: (Long?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val arrival = readArrival(context)
-            callback(arrival)
-        }
-    }
-
-    fun clearArrivalVM(context: android.content.Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            clearArrival(context)
+            cacheMutex.withLock {
+                var arrivedAt = arrivalCache.get(menuId)
+                if (arrivedAt != null) {
+                    Log.d("ArrivalCache", "hit $menuId")
+                } else {
+                    Log.d("ArrivalCache", "miss $menuId")
+                    val saved = readArrival(context)
+                    arrivedAt = if (saved != null && readMenuId(context) == menuId) saved else 0L
+                    arrivalCache.put(menuId, arrivedAt)
+                }
+                canFinishState.value = arrivedAt != 0L && System.currentTimeMillis() - arrivedAt < MAX_ARRIVAL_AGE_MILLIS
+            }
         }
     }
 
@@ -78,7 +89,7 @@ class WaitMeasurementViewModel(private val reportRepository: ReportRepository) :
     }
 
     fun finishMeasurement(context: android.content.Context) {
-        _canFinish.value = false
+        canFinishState.value = false
         viewModelScope.launch(Dispatchers.IO) {
             val arrival = readArrival(context)
             val menuId = readMenuId(context)
@@ -88,7 +99,10 @@ class WaitMeasurementViewModel(private val reportRepository: ReportRepository) :
                 if (minutes != null) {
                     savePendingMinutes(context, minutes, menuId, version)
                 }
-                clearArrival(context)
+                cacheMutex.withLock {
+                    clearArrival(context)
+                    arrivalCache.evictAll()
+                }
             }
         }
     }
@@ -118,7 +132,7 @@ class WaitMeasurementViewModel(private val reportRepository: ReportRepository) :
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                WaitMeasurementViewModel(app.container.reportRepository)
+                WaitMeasurementViewModel(app.container.reportRepository, app.container.arrivalCache)
             }
         }
     }

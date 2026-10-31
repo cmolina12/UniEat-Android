@@ -24,7 +24,7 @@ private val PENDING_MENU_ID_KEY = stringPreferencesKey("pending_menu_id")
 
 private val PENDING_VERSION_KEY = intPreferencesKey("pending_version")
 
-private const val MAX_ARRIVAL_AGE_MILLIS = MAX_WAIT_MINUTES * 60_000L
+const val MAX_ARRIVAL_AGE_MILLIS = MAX_WAIT_MINUTES * 60_000L
 
 suspend fun saveArrival(context: Context, millis: Long, menuId: String, version: Int) {
     context.waitMeasurementDataStore.edit { prefs ->
