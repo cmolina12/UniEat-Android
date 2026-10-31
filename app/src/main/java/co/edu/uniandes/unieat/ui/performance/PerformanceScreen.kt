@@ -33,6 +33,9 @@ import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
+import co.edu.uniandes.unieat.data.pilot.CachePilotGroup
+import co.edu.uniandes.unieat.data.pilot.CachePilotReport
+import co.edu.uniandes.unieat.data.pilot.PilotVariant
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.SCOPE_THIS_DEVICE
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
@@ -124,10 +127,11 @@ private fun PerformanceContent(
                     )
                 }
                 SummaryCards(state.summary, state.ownEstablishmentsOnly)
-                // BQ-01 is the admin's (all devices); a restaurant has no access to it.
+                // BQ-01 is admin only (all devices)
                 if (!state.ownEstablishmentsOnly) FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
+                state.cachePilot?.let { CachePilotBqCard(it) }
             }
         }
     }
@@ -243,10 +247,7 @@ private fun LocationGuidanceBqCard(snapshot: LocationGuidanceSnapshot, ownEstabl
     }
 }
 
-/**
- * Camilo — BQ-10: do complete establishments (pin + photo + entrance) get more arrivals and fewer
- * "no encontré el local" reports than incomplete ones? The backend counts and divides; this only shows it.
- */
+/** BQ-10 (Camilo): complete places (pin + photo + entrance) vs incomplete ones. The backend does the math, this only shows it. */
 @Composable
 private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
     val complete = snapshot.groups.complete
@@ -264,7 +265,7 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
             "Todos los establecimientos · todas las plataformas · últimos ${snapshot.periodDays} días",
             style = MaterialTheme.typography.bodySmall,
         )
-        // Two value columns instead of BQ-05's three: they get more room so the long headers fit.
+        // two value columns instead of three, so the long headers fit
         TableRow(listOf("", "Completos", "Incompletos"), header = true, labelWeight = BQ10_LABEL_WEIGHT)
         rows.forEach { (label, pick) -> TableRow(listOf(label, pick(complete), pick(incomplete)), labelWeight = BQ10_LABEL_WEIGHT) }
         Text(
@@ -274,7 +275,7 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Restaurants: what each of their places still lacks to move to the complete group.
+        // restaurants: what each of their places is missing to be complete
         snapshot.ownEstablishments.forEach { own ->
             Text(
                 if (own.missing.isEmpty()) "${own.name}: tiene todas las referencias."
@@ -289,6 +290,78 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
 
 private const val BQ10_LABEL_WEIGHT = 1.4f
 
+/**
+ * Samuel — BQ-13 (Type 1 + Type 3): cache-enabled vs online-only, compared only inside the same connection
+ * type and the same "was there a saved copy?" condition. The backend (or this phone, as fallback) counts
+ * and computes the percentiles; the card only lays them out side by side.
+ */
+@Composable
+private fun CachePilotBqCard(report: CachePilotReport) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-13 · Piloto de caché del feed", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        val scope = if (report.scope == SCOPE_THIS_DEVICE) {
+            "Solo este dispositivo (el servidor no respondió)"
+        } else {
+            "Todos los dispositivos"
+        }
+        Text(
+            "$scope · últimos ${report.periodDays} días · ${report.sessions} visitas terminadas",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (report.groups.isEmpty()) {
+            Text("Aún no hay visitas del piloto en este periodo. Los estudiantes se unen desde Perfil.")
+            return@SurfaceCard
+        }
+        report.groups.groupBy { it.connectionType to it.cacheAvailable }.forEach { (condition, cells) ->
+            val (connection, hadCopy) = condition
+            val cached = cells.firstOrNull { it.variant == PilotVariant.CACHE_ENABLED.wireName }
+            val online = cells.firstOrNull { it.variant == PilotVariant.ONLINE_ONLY.wireName }
+            Text(
+                "${connectionLabel(connection)} · " + if (hadCopy) "había copia guardada" else "sin copia guardada",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            TableRow(listOf("", "Con caché", "Solo en línea"), header = true, labelWeight = BQ10_LABEL_WEIGHT)
+            val rows: List<Pair<String, (CachePilotGroup?) -> String>> = listOf(
+                "Visitas" to { g -> g?.sessions?.toString() ?: "0" },
+                "Vieron menús" to { g -> g?.withContent?.toString() ?: "—" },
+                "Mediana hasta ver menús" to { g -> millis(g?.medianFirstContentMs) },
+                "p95 hasta ver menús" to { g -> millis(g?.p95FirstContentMs) },
+                "Terminaron sin elegir" to { g -> withoutSelection(g) },
+            )
+            rows.forEach { (label, pick) ->
+                TableRow(listOf(label, pick(cached), pick(online)), labelWeight = BQ10_LABEL_WEIGHT)
+            }
+        }
+        Text(
+            "Tiempo = desde que se pide el feed hasta ver menús (de la copia o del servidor). " +
+                "\"Sin elegir\" = visitas que terminaron sin tocar «Elegir este menú». El porcentaje aparece con " +
+                "${report.minSessionsForShare} visitas o más por grupo; antes se muestra la cuenta. " +
+                "Es una comparación descriptiva, no una prueba estadística.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun millis(value: Long?): String = value?.let { "$it ms" } ?: "—"
+
+/** "3/8 · 38 %" once there are enough visits, just "1/2" before that. */
+private fun withoutSelection(group: CachePilotGroup?): String {
+    if (group == null) return "—"
+    val count = "${group.withoutSelection}/${group.sessions}"
+    return group.withoutSelectionShare?.let { "$count · ${(it * 100).roundToInt()} %" } ?: count
+}
+
+private fun connectionLabel(type: String): String = when (type) {
+    "wifi" -> "Wi-Fi"
+    "cellular" -> "Datos móviles"
+    "ethernet" -> "Ethernet"
+    "offline" -> "Sin red"
+    else -> "Otra conexión"
+}
+
 private fun missingLabel(reference: String): String = when (reference) {
     "pin" -> "el pin en el mapa"
     "photo" -> "la foto"
@@ -302,7 +375,7 @@ private fun TableRow(cells: List<String>, header: Boolean = false, labelWeight: 
         cells.forEachIndexed { i, cell ->
             Text(
                 cell,
-                // The gap keeps right-aligned headers like "Completos" and "Incompletos" from touching.
+                // gap so "Completos" and "Incompletos" don't touch
                 modifier = Modifier.weight(if (i == 0) labelWeight else 1f).padding(start = if (i == 0) 0.dp else 6.dp),
                 textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
                 style = MaterialTheme.typography.bodySmall,

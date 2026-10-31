@@ -85,6 +85,13 @@ fun FeedScreen(
         viewModel.onFeedRendered((state as? FeedUiState.Content)?.loadId)
     }
 
+    // Samuel — BQ-13: runs after the frame that shows new menus (the saved copy first, then the fresh ones),
+    // so the pilot measures "time until the student sees menus", not "time until the data arrived".
+    val drawn = state as? FeedUiState.Content
+    LaunchedEffect(drawn) {
+        if (drawn != null) viewModel.onContentDrawn(drawn)
+    }
+
     // Small auth PR: an expired session sends the student back to the login.
     LaunchedEffect(state) {
         if (state is FeedUiState.SessionExpired) onSessionExpired()
@@ -208,7 +215,7 @@ private fun FilterButton(onClick: () -> Unit) {
     )
 }
 
-/** One feed card: photo (or drawing), name, price, the BQ-06 wait estimate and the backend's rank explanation. */
+/** Feed card: photo, name, price, the BQ-06 wait and the rank explanation. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {

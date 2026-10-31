@@ -40,7 +40,7 @@ class SupabaseAuthRepository(
             val errorCode = runCatching { response.body<AuthErrorDto>().errorCode }.getOrNull()
             throw signUpError(response.status.value, errorCode)
         }
-        // With email confirmation on, Supabase answers with the bare user and no tokens.
+        // with email confirmation on, Supabase returns just the user, no tokens
         val dto = response.body<SignUpDto>()
         val accessToken = dto.accessToken ?: return null
         val refreshToken = dto.refreshToken ?: return null

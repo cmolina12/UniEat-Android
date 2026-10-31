@@ -12,5 +12,8 @@ class UniEatApplication : Application() {
         container.feedLoadScheduler.schedule()
         // Reports saved without internet in a previous session.
         container.reportScheduler.schedule()
+        // BQ-13: pilot visits left open by the previous launch end now (no network needed) and are sent
+        // by WorkManager when there is network.
+        container.startCachePilot()
     }
 }

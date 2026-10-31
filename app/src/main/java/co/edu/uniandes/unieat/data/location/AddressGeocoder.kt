@@ -21,7 +21,7 @@ class AndroidAddressGeocoder(context: Context) : AddressGeocoder {
         val text = address.trim()
         if (text.isEmpty() || !Geocoder.isPresent()) return null
         return withContext(Dispatchers.IO) {
-            // Addresses like "Calle 19 #1-21" do not carry the city, so it is added.
+            // addresses like "Calle 19 #1-21" have no city, so we add it
             val found = runCatching {
                 Geocoder(appContext, Locale.forLanguageTag("es-CO")).getFromLocationName("$text, Bogotá, Colombia", 1)
             }.getOrNull()?.firstOrNull()

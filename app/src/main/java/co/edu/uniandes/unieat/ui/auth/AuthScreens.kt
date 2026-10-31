@@ -35,6 +35,7 @@ import co.edu.uniandes.unieat.data.auth.SupabaseAuthRepository
 import co.edu.uniandes.unieat.ui.profile.roleName
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.ChipRow
+import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.Sticker
@@ -47,6 +48,7 @@ fun LoginScreen(
     onSignedIn: () -> Unit,
 ) {
     val state by vm.state.collectAsState()
+    val offline by vm.offline.collectAsState()
     // The email and name survive rotation and process death; the password is dropped on purpose.
     var registering by rememberSaveable { mutableStateOf(false) }
     var displayName by rememberSaveable { mutableStateOf("") }
@@ -66,6 +68,13 @@ fun LoginScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         BrandHeader(if (registering) "Crear cuenta" else "Ingresar")
+        // Samuel — eventual connectivity: said before the student taps, not after a 10 s timeout.
+        if (offline) {
+            DemoNotice(
+                "Sin conexión · puedes ir escribiendo; entrar y crear la cuenta se activan al volver la señal" +
+                    if (demo) " (el modo demo sí funciona sin señal)" else "",
+            )
+        }
         ChipRow(
             options = listOf(false, true),
             isSelected = { it == registering },
@@ -142,7 +151,7 @@ fun LoginScreen(
                 else -> "Ingresar"
             },
             onClick = submit,
-            enabled = !loading,
+            enabled = !loading && !offline,
         )
         if (registering) {
             Text(

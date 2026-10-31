@@ -99,20 +99,24 @@ class ApiClient(
         const val PLATFORM_HEADER = "X-UniEat-Platform"
         const val PLATFORM = "android"
 
-        /** Reaching the server; on a healthy network it takes well under a second. */
+        /** Reaching the server. A dead link fails here. */
         const val CONNECT_TIMEOUT_MILLIS = 5_000L
 
-        /** Longest silence between two packets of an answer. */
+        /** Max silence between packets. A link that stops mid-answer fails here. */
         const val SOCKET_TIMEOUT_MILLIS = 8_000L
 
-        /** Whole request; the slowest endpoint (the dashboard) answers in about 2 s. */
-        const val REQUEST_TIMEOUT_MILLIS = 10_000L
+        /**
+         * Whole request, just a ceiling for a slow answer that keeps arriving. It was 10 s, but on EDGE
+         * the feed (~15 KB) was still downloading at 10 s and always showed "Sin conexión".
+         * The saved copy is already on screen meanwhile, so waiting longer costs nothing.
+         */
+        const val REQUEST_TIMEOUT_MILLIS = 30_000L
 
         fun defaultHttpClient(): HttpClient = HttpClient(OkHttp) {
             expectSuccess = false
             install(ContentNegotiation) { json(UniEatJson) }
-            // Weak signal (the "Q building test"): give up in seconds, not after 20 s of spinner. A timeout is
-            // an IOException, so it becomes OFFLINE and every screen falls back to its saved copy.
+            // Q building test: dead link -> fails in seconds (connect / silence), slow link -> can finish.
+            // A timeout is an IOException -> OFFLINE -> the screen shows its saved copy.
             install(HttpTimeout) {
                 connectTimeoutMillis = CONNECT_TIMEOUT_MILLIS
                 socketTimeoutMillis = SOCKET_TIMEOUT_MILLIS

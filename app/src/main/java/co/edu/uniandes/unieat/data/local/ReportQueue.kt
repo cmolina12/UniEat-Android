@@ -12,10 +12,7 @@ import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 
-/**
- * Reports made without internet wait in Room and are sent later, oldest first.
- * [enqueue] saves one and asks [scheduler] to run [flush] as soon as there is a connection.
- */
+/** Reports made offline wait in Room and go out later, oldest first. enqueue saves one and schedules flush. */
 class ReportQueue(
     private val dao: PendingReportDao,
     private val reports: ReportRepository,
@@ -23,7 +20,7 @@ class ReportQueue(
     private val clock: () -> Instant = Instant::now,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    /** Saves the report on IO (disk) and schedules the upload. */
+    /** Saves on IO (disk) and schedules the upload. */
     suspend fun enqueue(body: ReportBody) {
         withContext(io) {
             dao.insert(PendingReport.from(body, clock().toEpochMilli()))
@@ -35,8 +32,8 @@ class ReportQueue(
     fun pendingFor(publicationId: String): Flow<Int> = dao.countFor(publicationId)
 
     /**
-     * Sends every waiting report. Stops at the first one that can be retried later (no internet,
-     * session, rate limit, server error) so the order is kept; drops the ones the server will never accept.
+     * Sends everything waiting. Stops at the first one worth retrying later (no internet, session,
+     * rate limit, server error) to keep the order. Drops the ones the server will never accept.
      */
     suspend fun flush(): FlushResult = withContext(io) {
         dao.deleteOlderThan((clock() - MAX_AGE).toEpochMilli())
@@ -50,7 +47,7 @@ class ReportQueue(
         FlushResult.DONE
     }
 
-    /** true when the report left the queue (sent or dropped); false when it must wait for a later attempt. */
+    /** true = left the queue (sent or dropped), false = try again later. */
     private suspend fun send(report: PendingReport): Boolean {
         try {
             reports.submit(report.toBody())
@@ -58,27 +55,27 @@ class ReportQueue(
             return true
         } catch (e: ApiException) {
             return when (e.code) {
-                // The menu version no longer exists, it's the student's own menu, or the body is invalid: retrying won't help.
+                // version gone, own menu, or invalid body: retrying won't help
                 ApiException.VALIDATION_ERROR, ApiException.NOT_FOUND, ApiException.FORBIDDEN, ApiException.GONE -> {
                     dao.delete(report.id)
                     true
                 }
                 ApiException.INTERNAL_ERROR -> {
-                    // A report that keeps breaking the server must not block the ones behind it forever.
+                    // one that keeps breaking the server can't block the rest forever
                     if (report.attempts + 1 >= MAX_ATTEMPTS) dao.delete(report.id) else dao.markFailedAttempt(report.id)
                     false
                 }
-                // No internet, expired session, rate limit: same report, next time.
+                // no internet, expired session, rate limit: same report next time
                 else -> false
             }
         }
     }
 
-    /** The queue belongs to the signed-in student: it is emptied on sign-out, like the saved feed. */
+    /** Belongs to the signed-in student, emptied on sign-out. */
     suspend fun clear() = withContext(io) { dao.clear() }
 
     companion object {
-        /** A menu lasts 24 h at most: an older report no longer describes what the student saw. */
+        /** A menu lasts 24 h max, an older report no longer matches what the student saw. */
         val MAX_AGE: Duration = Duration.ofHours(24)
         const val MAX_ROWS = 50
         const val MAX_ATTEMPTS = 5

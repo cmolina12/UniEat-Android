@@ -1,11 +1,10 @@
 package co.edu.uniandes.unieat.data.telemetry
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import co.edu.uniandes.unieat.BuildConfig
 import co.edu.uniandes.unieat.core.model.UniEatJson
+import co.edu.uniandes.unieat.data.network.ConnectionType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -171,17 +170,8 @@ class FeedLoadTelemetry(
         file.parentFile?.mkdirs(); file.writeText(UniEatJson.encodeToString(records))
     }
 
-    private fun connectionType(): String {
-        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return "offline"
-        val caps = cm.getNetworkCapabilities(network) ?: return "unknown"
-        return when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-            else -> "other"
-        }
-    }
+    /** Same labels as BQ-13, so both questions group loads by the same connection types. */
+    private fun connectionType(): String = ConnectionType.current(appContext)
 
     companion object {
         internal const val ABANDONED_AFTER_MS = 60_000L
