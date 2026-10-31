@@ -73,6 +73,7 @@ import co.edu.uniandes.unieat.ui.theme.Sticker
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
 import co.edu.uniandes.unieat.ui.theme.UniEatTheme
 import co.edu.uniandes.unieat.ui.theme.cop
+import co.edu.uniandes.unieat.ui.wait.WaitMeasurementViewModel
 import java.time.Duration
 import java.time.Instant
 
@@ -84,6 +85,7 @@ fun MenuDetailScreen(
     onOpenMenu: (String) -> Unit,
     onSessionExpired: () -> Unit,
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
+    waitViewModel: WaitMeasurementViewModel = viewModel(factory = WaitMeasurementViewModel.factory()),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state) {
@@ -100,6 +102,19 @@ fun MenuDetailScreen(
         reportKind = kind
     }
     val context = LocalContext.current
+    val canFinishWait by waitViewModel.canFinish.collectAsStateWithLifecycle()
+    LaunchedEffect(menuId) {
+        waitViewModel.tryAgain(context)
+        waitViewModel.refreshCanFinish(context, menuId)
+    }
+    var arrivalSaved by rememberSaveable(menuId) { mutableStateOf(false) }
+    LaunchedEffect(arrival) {
+        val menu = (state as? MenuDetailUiState.Content)?.menu
+        if (arrival == ArrivalAnswer.CONFIRMED && menu != null && !arrivalSaved) {
+            waitViewModel.saveArrivalVM(context, System.currentTimeMillis(), menu.id, menu.version)
+            arrivalSaved = true
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -134,6 +149,8 @@ fun MenuDetailScreen(
         selected = selected,
         onOpenMenu = onOpenMenu,
         recommendation = recommendation,
+        canFinishWait = canFinishWait,
+        onFinishWait = { waitViewModel.finishMeasurement(context) },
     )
 
     val content = state as? MenuDetailUiState.Content
@@ -175,6 +192,8 @@ private fun MenuDetailContent(
     selected: Boolean = false,
     onOpenMenu: (String) -> Unit,
     recommendation: RecommendationNote? = null,
+    canFinishWait: Boolean = false,
+    onFinishWait: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -277,6 +296,9 @@ private fun MenuBody(
     val arrived = (distance as? DistanceStatus.Known)?.proximity?.arrived == true
     if (arrived || arrival == ArrivalAnswer.CONFIRMED) {
         ArrivalPrompt(menu.establishmentName, arrival, locationActions.onArrivalAnswered)
+    }
+    if (canFinishWait) {
+        SolidButton("Ya me atendieron", onClick = onFinishWait, color = Palette.Yellow)
     }
 
     WaitCard(menu, now)
