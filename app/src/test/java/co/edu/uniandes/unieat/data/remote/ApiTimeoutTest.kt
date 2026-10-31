@@ -39,9 +39,11 @@ class ApiTimeoutTest {
     }
 
     @Test
-    fun theAppGivesUpInSecondsNotAfterTwentySeconds() {
+    fun aDeadLinkIsDetectedInSecondsButASlowAnswerCanFinish() {
+        // Dead link: no connection, or silence in the middle of the answer.
         assertTrue(ApiClient.CONNECT_TIMEOUT_MILLIS <= 5_000)
-        assertTrue(ApiClient.REQUEST_TIMEOUT_MILLIS <= 10_000)
-        assertTrue(ApiClient.SOCKET_TIMEOUT_MILLIS <= ApiClient.REQUEST_TIMEOUT_MILLIS)
+        assertTrue(ApiClient.SOCKET_TIMEOUT_MILLIS <= 8_000)
+        // Slow link: the 15 KB feed over EDGE needs more than 10 s, so the whole-request ceiling is larger.
+        assertTrue(ApiClient.REQUEST_TIMEOUT_MILLIS >= 20_000)
     }
 }
