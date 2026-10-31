@@ -156,6 +156,10 @@ class MenuDetailViewModel(
         .flatMapLatest { (pin, access, enabled) -> distanceFlow(pin, access, enabled) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DistanceStatus.Idle)
 
+    /** Set after "Elegir este menú", so the button turns into a confirmation. */
+    private val _selected = MutableStateFlow(false)
+    val selected: StateFlow<Boolean> = _selected.asStateFlow()
+
     private val _arrival = MutableStateFlow<ArrivalAnswer?>(null)
     val arrival: StateFlow<ArrivalAnswer?> = _arrival.asStateFlow()
 
@@ -338,8 +342,11 @@ class MenuDetailViewModel(
     }
 
     fun onSelect() {
+        // one selection per detail, a second tap would count it twice
+        if (_selected.value) return
         val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
         eventTracker.track(EventKind.SELECTION, menu, SCREEN)
+        _selected.value = true
     }
 
     private fun distanceFlow(pinState: PinState, access: LocationAccess, enabled: Boolean): Flow<DistanceStatus> {

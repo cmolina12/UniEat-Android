@@ -93,6 +93,7 @@ fun MenuDetailScreen(
     val arrival by viewModel.arrival.collectAsStateWithLifecycle()
     val report by viewModel.report.collectAsStateWithLifecycle()
     val queuedReports by viewModel.queuedReports.collectAsStateWithLifecycle()
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
     var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
     val openReport = { kind: ReportKind ->
         viewModel.onReportSheetOpened()
@@ -130,6 +131,7 @@ fun MenuDetailScreen(
         onBack = onBack,
         onRetry = viewModel::load,
         onSelect = viewModel::onSelect,
+        selected = selected,
         onOpenMenu = onOpenMenu,
         recommendation = recommendation,
     )
@@ -170,6 +172,7 @@ private fun MenuDetailContent(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onSelect: () -> Unit,
+    selected: Boolean = false,
     onOpenMenu: (String) -> Unit,
     recommendation: RecommendationNote? = null,
 ) {
@@ -202,7 +205,7 @@ private fun MenuDetailContent(
                 recommendation?.let { RecommendationCard(it) }
                 MenuBody(
                     state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
-                    queuedReports,
+                    queuedReports, selected,
                 )
             }
             is MenuDetailUiState.Gone -> StatusMessage(
@@ -241,6 +244,7 @@ private fun MenuBody(
     onSelect: () -> Unit,
     onReport: () -> Unit,
     queuedReports: Int,
+    selected: Boolean,
 ) {
     val active = menu.isActive(now)
 
@@ -297,7 +301,23 @@ private fun MenuBody(
         )
     }
 
-    if (active) {
+    if (active && selected) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(Palette.Green.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ink)
+            Text(
+                "Elegiste este menú. Usa el mapa de arriba para llegar al local.",
+                fontWeight = FontWeight.Bold,
+                color = Palette.Ink,
+            )
+        }
+    } else if (active) {
         SolidButton("Elegir este menú", onClick = onSelect, icon = Icons.Filled.Check, color = Palette.Yellow)
     } else {
         Text(
