@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,9 +92,12 @@ class WaitMeasurementViewModel(
     fun finishMeasurement(context: android.content.Context) {
         canFinishState.value = false
         viewModelScope.launch(Dispatchers.IO) {
-            val arrival = readArrival(context)
-            val menuId = readMenuId(context)
-            val version = readVersion(context)
+            val arrivalDeferred = async { readArrival(context) }
+            val menuIdDeferred = async { readMenuId(context) }
+            val versionDeferred = async { readVersion(context) }
+            val arrival = arrivalDeferred.await()
+            val menuId = menuIdDeferred.await()
+            val version = versionDeferred.await()
             if (arrival != null && menuId != null && version != null) {
                 val minutes = calculateWaitMinutes(arrival, System.currentTimeMillis())
                 if (minutes != null) {
