@@ -24,6 +24,7 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.data.local.MAX_ARRIVAL_AGE_MILLIS
 import co.edu.uniandes.unieat.data.local.WaitRecord
 import co.edu.uniandes.unieat.data.local.WaitRecordDao
+import co.edu.uniandes.unieat.data.local.appendSentReport
 import co.edu.uniandes.unieat.data.local.waitMinutes
 import co.edu.uniandes.unieat.data.local.clearArrival
 import co.edu.uniandes.unieat.data.local.clearPendingMinutes
@@ -118,6 +119,7 @@ class WaitMeasurementViewModel(
             try {
                 reportRepository.submit(body)
                 clearPendingMinutes(context)
+                appendSentReport(context, menuId, minutes)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context.applicationContext, "Tu medición de espera se envió", Toast.LENGTH_SHORT).show()
                 }

@@ -32,6 +32,7 @@ import co.edu.uniandes.unieat.data.local.UniEatDatabase
 import co.edu.uniandes.unieat.data.local.WaitHistoryDatabase
 import co.edu.uniandes.unieat.data.local.clearArrival
 import co.edu.uniandes.unieat.data.local.clearPendingMinutes
+import co.edu.uniandes.unieat.data.local.clearSentReports
 import co.edu.uniandes.unieat.data.local.WorkManagerReportScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
 import co.edu.uniandes.unieat.data.network.ConnectionType
@@ -248,10 +249,13 @@ class AppContainer(
                 offlineStore?.clear()
                 profileCache?.clear()
                 // otherwise a pending wait measurement would go out with the next account's session
-                clearArrival(context)
-                clearPendingMinutes(context)
-                arrivalCache.evictAll()
-                waitRecords.deleteAll()
+                if (!usesFakeData) {
+                    clearArrival(context)
+                    clearPendingMinutes(context)
+                    arrivalCache.evictAll()
+                    waitRecords.deleteAll()
+                    clearSentReports(context)
+                }
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
                 if (!usesFakeData) cachePilot.clear()
