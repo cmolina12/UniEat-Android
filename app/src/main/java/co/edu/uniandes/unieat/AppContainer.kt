@@ -2,6 +2,7 @@ package co.edu.uniandes.unieat
 
 import android.content.Context
 import androidx.collection.LruCache
+import androidx.room.Room
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
@@ -28,6 +29,10 @@ import co.edu.uniandes.unieat.data.local.ProfileCache
 import co.edu.uniandes.unieat.data.local.ReportQueue
 import co.edu.uniandes.unieat.data.local.settingsDataStore
 import co.edu.uniandes.unieat.data.local.UniEatDatabase
+import co.edu.uniandes.unieat.data.local.WaitHistoryDatabase
+import co.edu.uniandes.unieat.data.local.clearArrival
+import co.edu.uniandes.unieat.data.local.clearPendingMinutes
+import co.edu.uniandes.unieat.data.local.clearSentReports
 import co.edu.uniandes.unieat.data.local.WorkManagerReportScheduler
 import co.edu.uniandes.unieat.data.location.FusedLocationRepository
 import co.edu.uniandes.unieat.data.network.ConnectionType
@@ -117,6 +122,13 @@ class AppContainer(
 
     /** Recently opened details in memory (LruCache, 20). */
     val menuDetailCache = MenuDetailCache()
+
+    /** Arrival time per menu, 0L when there is none. 20 because the campus has few restaurants (17 in the seeds, about 8 active). */
+    val arrivalCache = LruCache<String, Long>(20)
+
+    val waitRecords by lazy {
+        Room.databaseBuilder(context.applicationContext, WaitHistoryDatabase::class.java, "wait_history.db").build().records()
+    }
 
     /** Offline copy of the feed. Not needed in demo mode. */
     val feedCache: FeedCache? by lazy {
@@ -236,6 +248,14 @@ class AppContainer(
                 // one account's drafts and lists can't show up for the next one
                 offlineStore?.clear()
                 profileCache?.clear()
+                // otherwise a pending wait measurement would go out with the next account's session
+                if (!usesFakeData) {
+                    clearArrival(context)
+                    clearPendingMinutes(context)
+                    arrivalCache.evictAll()
+                    waitRecords.deleteAll()
+                    clearSentReports(context)
+                }
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
                 if (!usesFakeData) cachePilot.clear()
