@@ -114,6 +114,14 @@ fun RecommendScreen(
                         label = { it.label },
                         onSelect = viewModel::selectStrategy,
                     )
+                    if (content.savedAt != null && !content.refreshing && strategy == FastestWaitStrategy &&
+                        content.menus.none { it.hasWaitEvidence(serverNow) }
+                    ) {
+                        Text(
+                            "Sin conexión y sin datos de fila recientes en esta copia: te mostramos el orden normal",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     Text("Hoy prueba aquí", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
                     Text(
                         "La opción cumple tus filtros declarados. Revisa la información estimada antes de ir.",
