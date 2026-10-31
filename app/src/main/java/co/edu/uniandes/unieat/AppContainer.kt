@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat
 
 import android.content.Context
+import androidx.collection.LruCache
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
 import co.edu.uniandes.unieat.core.model.FeedFilters
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
