@@ -99,20 +99,26 @@ class ApiClient(
         const val PLATFORM_HEADER = "X-UniEat-Platform"
         const val PLATFORM = "android"
 
-        /** Reaching the server; on a healthy network it takes well under a second. */
+        /** Reaching the server; on a healthy network it takes well under a second. A dead link fails here. */
         const val CONNECT_TIMEOUT_MILLIS = 5_000L
 
-        /** Longest silence between two packets of an answer. */
+        /** Longest silence between two packets of an answer. A link that stops mid-answer fails here. */
         const val SOCKET_TIMEOUT_MILLIS = 8_000L
 
-        /** Whole request; the slowest endpoint (the dashboard) answers in about 2 s. */
-        const val REQUEST_TIMEOUT_MILLIS = 10_000L
+        /**
+         * Whole request: only a ceiling for an answer that keeps arriving, slowly. On the emulator's EDGE profile
+         * the feed (about 15 KB) took more than 10 s while still downloading, so a 10 s cap turned a slow but
+         * working signal into "Sin conexión". The dead-link cases are caught by the two limits above, and while
+         * the request runs the screens already show their saved copy ("Actualizando…"), so waiting costs nothing.
+         */
+        const val REQUEST_TIMEOUT_MILLIS = 30_000L
 
         fun defaultHttpClient(): HttpClient = HttpClient(OkHttp) {
             expectSuccess = false
             install(ContentNegotiation) { json(UniEatJson) }
-            // Weak signal (the "Q building test"): give up in seconds, not after 20 s of spinner. A timeout is
-            // an IOException, so it becomes OFFLINE and every screen falls back to its saved copy.
+            // Weak signal (the "Q building test"): a dead link is detected in seconds (connect / silence), a slow
+            // one is allowed to finish. A timeout is an IOException, so it becomes OFFLINE and every screen falls
+            // back to its saved copy.
             install(HttpTimeout) {
                 connectTimeoutMillis = CONNECT_TIMEOUT_MILLIS
                 socketTimeoutMillis = SOCKET_TIMEOUT_MILLIS
