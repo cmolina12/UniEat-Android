@@ -14,7 +14,7 @@ import java.io.File
 import java.time.Duration
 import java.time.Instant
 
-/** Last successful GET /feed per filter combination, shown when the device is offline. */
+/** Last successful GET /feed per filter combination, for offline. */
 @Serializable
 data class CachedFeed(
     val filters: FeedFilters,
@@ -23,16 +23,15 @@ data class CachedFeed(
 )
 
 /**
- * Server time − device time for a saved copy read at [deviceNow]. It keeps the offset measured when saving,
- * but never estimates a server time earlier than [serverNow] at saving: if the phone's clock was corrected
- * in between, time cannot have gone backwards.
+ * Server time - device time for a saved copy. Keeps the offset from when it was saved, but never
+ * goes before the server time at saving (if the phone clock was fixed in between).
  */
 fun savedClockOffset(savedAt: Instant, serverNow: Instant, deviceNow: Instant): Duration {
     val estimated = deviceNow + Duration.between(savedAt, serverNow)
     return Duration.between(deviceNow, maxOf(estimated, serverNow))
 }
 
-/** One menu taken from a saved feed, with the clocks needed to judge its validity offline. */
+/** One menu from a saved feed, with the clocks to judge its validity offline. */
 data class SavedMenu(val menu: DailyMenu, val serverNow: Instant, val savedAt: Instant)
 
 interface FeedCache {
@@ -40,16 +39,13 @@ interface FeedCache {
 
     suspend fun load(filters: FeedFilters): CachedFeed?
 
-    /** The newest saved copy of menu [id] across every filter combination, for the detail offline. */
+    /** Newest saved copy of menu id across all filters, for the detail offline. */
     suspend fun findMenu(id: String): SavedMenu?
 
     suspend fun clear()
 }
 
-/**
- * One JSON file per filter combination. The copy belongs to the signed-in user,
- * so [clear] runs on sign-out. Only the [MAX_ENTRIES] most recent combinations are kept.
- */
+/** One JSON file per filter combination, only the MAX_ENTRIES most recent. Cleared on sign-out. */
 class FileFeedCache(private val dir: File) : FeedCache {
     private val mutex = Mutex()
 

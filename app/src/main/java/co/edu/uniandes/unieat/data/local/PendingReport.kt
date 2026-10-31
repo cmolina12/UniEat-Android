@@ -10,16 +10,13 @@ import co.edu.uniandes.unieat.core.model.ReportBody
 import co.edu.uniandes.unieat.core.model.ReportKind
 import kotlinx.coroutines.flow.Flow
 
-/**
- * One row of `pending_reports`: a community report the student sent without internet.
- * It keeps exactly what POST /reports needs, plus when it was made and how many times sending failed.
- */
+/** A row of pending_reports: an offline report with what POST /reports needs, when it was made and failed attempts. */
 @Entity(tableName = "pending_reports", indices = [Index("publicationId")])
 data class PendingReport(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val publicationId: String,
     val version: Int,
-    /** Room stores the enum by name ("NOT_FOUND"); the API name ("not_found") comes back through ReportBody. */
+    /** Room stores the enum name ("NOT_FOUND"), ReportBody turns it into "not_found". */
     val kind: ReportKind,
     val note: String?,
     val observedWaitMinutes: Int?,
@@ -40,13 +37,13 @@ data class PendingReport(
     }
 }
 
-/** The SQL the queue needs. Room generates the implementation at compile time (KSP). */
+/** Queries for the queue. Room generates the code at compile time (KSP). */
 @Dao
 interface PendingReportDao {
     @Insert
     suspend fun insert(report: PendingReport): Long
 
-    /** Oldest first, so reports reach the server in the order they were made. */
+    /** Oldest first so they arrive in order. */
     @Query("SELECT * FROM pending_reports ORDER BY createdAtMillis ASC LIMIT :limit")
     suspend fun oldest(limit: Int): List<PendingReport>
 
@@ -56,15 +53,15 @@ interface PendingReportDao {
     @Query("UPDATE pending_reports SET attempts = attempts + 1 WHERE id = :id")
     suspend fun markFailedAttempt(id: Long)
 
-    /** Reports too old to still describe the menu the student saw. */
+    /** Too old to still describe the menu the student saw. */
     @Query("DELETE FROM pending_reports WHERE createdAtMillis < :cutoffMillis")
     suspend fun deleteOlderThan(cutoffMillis: Long)
 
-    /** Keeps only the [keep] newest rows, so a phone offline for days cannot grow the table forever. */
+    /** Keeps the [keep] newest rows so the table can't grow forever. */
     @Query("DELETE FROM pending_reports WHERE id NOT IN (SELECT id FROM pending_reports ORDER BY createdAtMillis DESC LIMIT :keep)")
     suspend fun trimTo(keep: Int)
 
-    /** Live count for one menu: the detail screen shows "1 reporte esperando conexión" and updates by itself. */
+    /** Live count per menu for "N reporte(s) esperando señal" in the detail. */
     @Query("SELECT COUNT(*) FROM pending_reports WHERE publicationId = :publicationId")
     fun countFor(publicationId: String): Flow<Int>
 

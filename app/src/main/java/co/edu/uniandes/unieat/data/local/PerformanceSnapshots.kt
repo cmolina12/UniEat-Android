@@ -17,7 +17,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
 
-/** The last dashboard that loaded for one role and period, shown when the device is offline. */
+/** Last dashboard for a role and period, for offline. */
 @Serializable
 data class SavedPerformance(
     val role: String,
@@ -38,11 +38,7 @@ interface PerformanceSnapshots {
     suspend fun clear()
 }
 
-/**
- * One JSON file per role and period (at most 2 periods × a role). Written to a temporary file and then
- * moved over the old one, so a crash mid-write never leaves a half file. Cleared on sign-out: metrics
- * belong to the account that loaded them.
- */
+/** One JSON file per role and period. Temp file + move so a crash never leaves half a file. Cleared on sign-out. */
 class FilePerformanceSnapshots(
     private val dir: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,

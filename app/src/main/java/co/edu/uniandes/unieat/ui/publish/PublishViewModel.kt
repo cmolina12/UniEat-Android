@@ -27,7 +27,7 @@ import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.Instant
 
-/** One dish of the form. [key] only tells the drafts apart while the list changes. */
+/** One dish in the form. key is only for the list. */
 @Serializable
 data class DishDraft(
     val key: Long,
@@ -41,7 +41,7 @@ data class DishDraft(
     val price: Int get() = priceText.toIntOrNull() ?: 0
     val isComplete: Boolean get() = name.isNotBlank() && price > 0
 
-    /** Diet is sent only when the restaurant confirmed it; vegan also counts as vegetarian. */
+    /** Diet only if confirmed. Vegan also counts as vegetarian. */
     fun toBody(): MenuBody.Dish {
         val tags = when {
             !dietaryKnown -> emptyList()
@@ -83,7 +83,7 @@ data class PublishForm(
     val paymentMethods: Set<String> = setOf("Nequi", "Efectivo"),
     val dishes: List<DishDraft>,
 ) {
-    /** Same rules as iOS and api-v1: up to 24 h of validity, one payment method, every dish with name and price. */
+    /** Same rules as iOS and api-v1: max 24 h, one payment method, every dish with name and price. */
     fun isValid(now: Instant): Boolean =
         establishmentId != null &&
             establishmentName.isNotBlank() &&
@@ -92,7 +92,7 @@ data class PublishForm(
             paymentMethods.isNotEmpty() &&
             dishes.isNotEmpty() && dishes.all { it.isComplete }
 
-    /** What still keeps the form from being published, in the owner's words (empty when it is valid). */
+    /** What's missing to publish (empty = valid). */
     fun missing(now: Instant): List<String> = buildList {
         if (establishmentId == null) add("elegir un establecimiento aprobado")
         if (establishmentName.isBlank()) add("el nombre del restaurante")
@@ -107,16 +107,16 @@ data class PublishForm(
         }
     }
 
-    /** Something the owner typed: only then is the form worth keeping as a draft. */
+    /** Only worth a draft if the owner typed something. */
     val hasInput: Boolean
         get() = dishes.any { it.name.isNotBlank() || it.description.isNotBlank() || it.priceText.isNotBlank() }
 }
 
-/** What is saved on the phone while the form is not published: the form and the version being edited, if any. */
+/** Draft on the phone: the form and the version being edited. */
 @Serializable
 data class PublishDraft(val form: PublishForm, val editing: DailyMenu? = null)
 
-/** The lists of the tab, saved after each successful load so they can be shown offline. */
+/** Lists saved after each load, for offline. */
 @Serializable
 data class SavedPublishData(val establishments: List<OwnEstablishment>, val myMenus: List<DailyMenu>)
 
@@ -129,24 +129,24 @@ data class PublishUiState(
     val message: String? = null,
     val saving: Boolean = false,
     val sessionExpired: Boolean = false,
-    /** No validated connection: publishing and closing wait for the signal (network only). */
+    /** No connection: publish and close are off (network only). */
     val offline: Boolean = false,
-    /** Set when the lists come from the copy saved at that time instead of the server. */
+    /** Time of the saved copy when offline. */
     val savedAt: Instant? = null,
 ) {
-    /** Only establishments an admin already approved can publish. */
+    /** Only approved establishments can publish. */
     val approved: List<OwnEstablishment> get() = establishments.filter { it.approved }
 }
 
-/** "Publicar" tab for restaurants: create, edit (new version) and close the menu of the day. */
+/** Publicar tab: create, edit (new version) and close today's menu. */
 @OptIn(FlowPreview::class)
 class PublishViewModel(
     private val menus: MenuRepository,
     private val establishments: EstablishmentRepository,
     private val clock: () -> Instant = Instant::now,
-    /** Saved lists and the unpublished draft. null in demo mode. */
+    /** Saved lists + draft. null in demo mode. */
     private val store: OfflineStore? = null,
-    /** Validated-connection changes: buttons turn off without signal and everything reloads when it returns. */
+    /** Offline turns the buttons off; everything reloads when the signal returns. */
     online: Flow<Boolean> = emptyFlow(),
 ) : ViewModel() {
     private var nextDishKey = 0L
@@ -156,12 +156,12 @@ class PublishViewModel(
 
     init {
         viewModelScope.launch {
-            // The draft first, so the load does not overwrite the form with the default establishment.
+            // draft first, so the default establishment doesn't overwrite the form
             restoreDraft()
             refresh()
         }
         viewModelScope.launch {
-            // Every change to the form is written to disk half a second after the owner stops typing.
+            // save the draft 500 ms after the owner stops typing
             _state.map { PublishDraft(it.form, it.editing) }
                 .distinctUntilChanged()
                 .drop(1)
@@ -172,7 +172,7 @@ class PublishViewModel(
             online.collect { isOnline ->
                 val current = _state.value
                 _state.update { it.copy(offline = !isOnline) }
-                // Back online: replace the saved copy (or the "no data" message) with the server's.
+                // back online: replace the saved copy with the server's
                 if (isOnline && (current.offline || current.savedAt != null)) refresh()
             }
         }
@@ -182,7 +182,7 @@ class PublishViewModel(
         viewModelScope.launch { refresh() }
     }
 
-    /** Network falling back to cache: the server's lists, or the last ones saved when there is no signal. */
+    /** Network falling back to cache. */
     private suspend fun refresh() {
         _state.update { it.copy(loading = true) }
         try {
@@ -205,7 +205,7 @@ class PublishViewModel(
     private fun showData(mine: List<OwnEstablishment>, own: List<DailyMenu>, savedAt: Instant?) {
         _state.update { state ->
             val withData = state.copy(loading = false, establishments = mine, myMenus = own, savedAt = savedAt)
-            // The first approved establishment is selected so the form starts filled in.
+            // start with the first approved establishment
             val first = withData.approved.firstOrNull()
             if (withData.form.establishmentId == null && first != null) {
                 withData.copy(form = withData.form.filledFrom(first))
@@ -215,11 +215,11 @@ class PublishViewModel(
         }
     }
 
-    /** Case study 2 of the course (Luisa): a form filled in must survive the app closing. */
+    /** The draft survives closing the app (Luisa case). */
     private suspend fun restoreDraft() {
         val draft = store?.load(DRAFT_KEY, PublishDraft.serializer())?.value ?: return
         val now = clock()
-        // An old draft can come back expired: it gets the default validity so it can still be published.
+        // an old draft may be expired, give it the default validity
         val validUntil = draft.form.validUntil.takeIf { it > now } ?: (now + DEFAULT_VALIDITY)
         nextDishKey = (draft.form.dishes.maxOfOrNull { it.key } ?: -1) + 1
         _state.update {
@@ -279,7 +279,7 @@ class PublishViewModel(
                     address = menu.address,
                     entranceDescription = menu.entranceDescription,
                     title = menu.title,
-                    // An expired menu gets at least one more hour, so saving it is possible.
+                    // expired menu: at least one more hour so it can be saved
                     validUntil = maxOf(menu.validUntil, now + Duration.ofHours(1)),
                     paymentMethods = menu.paymentMethods.toSet(),
                     dishes = menu.items.map { dish -> DishDraft.from(dish, nextDishKey++) },
@@ -311,9 +311,9 @@ class PublishViewModel(
         viewModelScope.launch {
             try {
                 if (editing != null) menus.revise(editing.id, body) else menus.publish(body)
-                // Published: the draft must not come back the next time the tab opens.
+                // published: delete the draft
                 store?.remove(DRAFT_KEY)
-                // Already published: if the list fails to reload now, the old one stays instead of an error.
+                // already published: if the reload fails keep the old list
                 val own = runCatching { ownMenus() }.getOrDefault(current.myMenus)
                 _state.update {
                     it.copy(
@@ -326,7 +326,7 @@ class PublishViewModel(
                 }
             } catch (e: ApiException) {
                 if (e.code == ApiException.VERSION_CONFLICT) {
-                    // Someone else edited first: reload so the owner edits the current version.
+                    // someone else edited first: reload the current version
                     val own = runCatching { ownMenus() }.getOrDefault(current.myMenus)
                     _state.update {
                         it.copy(
@@ -337,8 +337,7 @@ class PublishViewModel(
                         )
                     }
                 } else {
-                    // Network only: a publication is never queued. It creates a version, and sent hours later it
-                    // could overwrite a newer one (case study 1 of the course, Dairo).
+                    // network only, never queued: a late publish could overwrite a newer version (Dairo case)
                     if (e.code == ApiException.OFFLINE) offlineAction(PUBLISH_OFFLINE_MESSAGE)
                     else fail(e, "No se pudo guardar el menú. Revisa los datos e inténtalo de nuevo.")
                 }
@@ -346,10 +345,7 @@ class PublishViewModel(
         }
     }
 
-    /**
-     * Leaves edit mode or throws the draft away and starts an empty menu for the first approved
-     * establishment. The saved draft is deleted too, so it does not come back on the next launch.
-     */
+    /** Leaves edit mode or discards the draft (also deleted from disk) and starts empty. */
     fun discardDraft() {
         val wasEditing = _state.value.editing != null
         _state.update { state ->
@@ -363,7 +359,7 @@ class PublishViewModel(
         viewModelScope.launch { store?.remove(DRAFT_KEY) }
     }
 
-    /** Takes the menu out of the feed before it expires; its history stays. */
+    /** Closes the menu early. Its history stays. */
     fun close(menu: DailyMenu) {
         if (_state.value.offline) return offlineAction(CLOSE_OFFLINE_MESSAGE)
         viewModelScope.launch {
@@ -384,7 +380,7 @@ class PublishViewModel(
         }
     }
 
-    /** GET /menus/mine answers FORBIDDEN while no establishment is approved: that just means no menus yet. */
+    /** FORBIDDEN here just means no approved establishment yet, so no menus. */
     private suspend fun ownMenus(): List<DailyMenu> = try {
         menus.myMenus()
     } catch (e: ApiException) {
@@ -437,7 +433,7 @@ class PublishViewModel(
     }
 }
 
-/** "vigente", "vencida" or "cerrada", as in the owner's list on iOS. */
+/** "vigente", "vencida" or "cerrada", like iOS. */
 fun DailyMenu.ownerStatus(now: Instant): String = when {
     closedAt != null -> "cerrada"
     isActive(now) -> "vigente"

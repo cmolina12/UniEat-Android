@@ -24,10 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
-/**
- * The place's photo when it has one, over the drawing with its name. While the photo loads, or if it
- * fails, the drawing shows through. Same piece as iOS FoodArtwork: feed cards and the detail header.
- */
+/** The place's photo over the drawing with its name (the drawing shows while it loads or if it fails). Like iOS FoodArtwork. */
 @Composable
 fun FoodArtwork(name: String, photoUrl: String?, height: Dp) {
     Box(

@@ -12,13 +12,10 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-/**
- * Small user settings (key-value), in their own DataStore file "unieat_settings".
- * Separate from "unieat_session" (Samuel's): two DataStores must never share a file.
- */
+/** Small settings (key-value) in their own DataStore file "unieat_settings", separate from Samuel's "unieat_session". */
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "unieat_settings")
 
-/** The period Rendimiento shows, so the dashboard opens the way the user left it. */
+/** Rendimiento period, so it opens the way the user left it. */
 interface PerformancePreferences {
     val days: Flow<Int>
 
@@ -27,7 +24,7 @@ interface PerformancePreferences {
 
 class DataStorePerformancePreferences(private val store: DataStore<Preferences>) : PerformancePreferences {
     override val days: Flow<Int> = store.data
-        // An unreadable file must not break the screen: fall back to the default.
+        // unreadable file: use the default instead of breaking the screen
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
         .map { prefs -> prefs[DAYS]?.takeIf { it in VALID_DAYS } ?: DEFAULT_DAYS }
 

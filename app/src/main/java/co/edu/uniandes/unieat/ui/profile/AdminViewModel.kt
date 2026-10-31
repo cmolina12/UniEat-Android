@@ -22,25 +22,25 @@ import java.time.Instant
 data class AdminUiState(
     val requests: List<PendingMembership> = emptyList(),
     val users: List<AdminUser> = emptyList(),
-    /** Request or user being changed; buttons stay disabled meanwhile. */
+    /** Request or user being changed, buttons stay disabled meanwhile. */
     val workingId: String? = null,
     /** User waiting for the "¿Conceder/Quitar…?" confirmation. */
     val confirming: AdminUser? = null,
     val requestsMessage: String? = null,
     val usersMessage: String? = null,
-    /** No validated connection: approving and changing roles wait for the signal (network only). */
+    /** No connection: approving and changing roles are off (network only). */
     val offline: Boolean = false,
-    /** Set when each list comes from the copy saved at that time instead of the server. */
+    /** Time of each saved list when offline. */
     val requestsSavedAt: Instant? = null,
     val usersSavedAt: Instant? = null,
 )
 
-/** Admin side of Perfil, same as iOS AdminApprovalsView and AdminRolesView. */
+/** Admin part of Perfil, like iOS AdminApprovalsView and AdminRolesView. */
 class AdminViewModel(
     private val admin: AdminRepository,
-    /** Last lists that loaded, shown offline. null in demo mode. */
+    /** Last lists that loaded, for offline. null in demo mode. */
     private val store: OfflineStore? = null,
-    /** Validated-connection changes: buttons turn off without signal and both lists reload when it returns. */
+    /** Offline turns the buttons off; both lists reload when the signal returns. */
     online: Flow<Boolean> = emptyFlow(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(AdminUiState())
@@ -58,7 +58,7 @@ class AdminViewModel(
         }
     }
 
-    /** Both lists are independent: they load in parallel and one failing does not hide the other. */
+    /** The two lists load in parallel; if one fails the other still shows. */
     private suspend fun loadBoth() = coroutineScope {
         val requests = async { loadRequests() }
         val users = async { loadUsers() }
@@ -88,7 +88,7 @@ class AdminViewModel(
                     it.copy(requestsMessage = "${request.establishmentName} aprobado. El dueño debe actualizar su estado en la app.")
                 }
             } catch (e: ApiException) {
-                // Network only: the server must confirm the request is still pending, so approvals are never queued.
+                // network only: the server has to confirm it's still pending, approvals are never queued
                 _state.update { it.copy(requestsMessage = if (e.code == ApiException.OFFLINE) APPROVE_OFFLINE_MESSAGE else e.error.message) }
             } finally {
                 _state.update { it.copy(workingId = null) }
@@ -118,7 +118,7 @@ class AdminViewModel(
         }
     }
 
-    /** Network falling back to cache, same as the two lists below. */
+    /** Network falling back to cache, same as the lists below. */
     private suspend fun loadRequests() {
         try {
             val requests = admin.pendingMemberships()
@@ -161,7 +161,7 @@ class AdminViewModel(
     }
 }
 
-/** A user can request several establishments, so the pair identifies the request. */
+/** One user can request several establishments, so the pair is the id. */
 val PendingMembership.key: String get() = "$establishmentId:$userId"
 
 fun roleName(role: String?): String = when (role) {

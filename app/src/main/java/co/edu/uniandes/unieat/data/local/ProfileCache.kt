@@ -11,11 +11,11 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import java.io.IOException
 
-/** The last GET /me of the signed-in user, so the app knows its role (and tabs) when it opens offline. */
+/** Last GET /me of the signed-in user, so the role and tabs work when opening offline. */
 interface ProfileCache {
     suspend fun save(userId: String, profile: MeResponse)
 
-    /** null when nothing was saved, or it belongs to another account. */
+    /** null if nothing was saved or it's from another account. */
     suspend fun load(userId: String): MeResponse?
 
     suspend fun clear()

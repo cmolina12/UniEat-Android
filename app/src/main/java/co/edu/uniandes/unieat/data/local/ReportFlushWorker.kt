@@ -14,7 +14,7 @@ import co.edu.uniandes.unieat.data.analytics.FlushResult
 import co.edu.uniandes.unieat.data.analytics.FlushScheduler
 import java.util.concurrent.TimeUnit
 
-/** Runs [ReportQueue.flush] in the background; WorkManager only starts it once there is a connection. */
+/** Runs ReportQueue.flush in the background. WorkManager only starts it when there's a connection. */
 class ReportFlushWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val queue = (applicationContext as UniEatApplication).container.reportQueue
@@ -25,14 +25,14 @@ class ReportFlushWorker(context: Context, params: WorkerParameters) : CoroutineW
     }
 }
 
-/** Same pattern as the analytics events: one unique job, network required, exponential retries. */
+/** Same as the analytics events: one unique job, needs network, exponential retries. */
 class WorkManagerReportScheduler(private val context: Context) : FlushScheduler {
     override fun schedule() {
         val request = OneTimeWorkRequestBuilder<ReportFlushWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        // KEEP: if an upload is already waiting, it will also take the new report.
+        // KEEP: an upload already waiting will also take the new report
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
     }
 

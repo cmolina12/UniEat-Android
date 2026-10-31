@@ -39,7 +39,7 @@ data class EstablishmentRequestForm(
     val photoUrl: String = "",
     val paymentMethods: Set<String> = setOf("Efectivo"),
     val pin: Coordinate? = null,
-    /** A pin found from the address is dropped when the address changes; a GPS or hand-placed one stays. */
+    /** A pin from the address is dropped if the address changes. GPS or manual pins stay. */
     val pinFromAddress: Boolean = false,
 ) {
     val photoUrlValid: Boolean get() = isValidPhotoUrl(photoUrl)
@@ -47,7 +47,7 @@ data class EstablishmentRequestForm(
     val canSubmit: Boolean
         get() = name.isNotBlank() && address.isNotBlank() && paymentMethods.isNotEmpty() && photoUrlValid
 
-    /** Something the owner typed or placed: only then is the request kept as a draft. */
+    /** Only worth a draft if the owner typed or placed something. */
     val hasInput: Boolean
         get() = listOf(name, address, entranceDescription, photoUrl).any { it.isNotBlank() } || pin != null
 }
@@ -62,16 +62,15 @@ data class EstablishmentsUiState(
     val locating: Boolean = false,
     val pinMessage: String? = null,
     val message: String? = null,
-    /** No validated connection: sending the request and searching an address wait for the signal. */
+    /** No connection: sending and address search are off. */
     val offline: Boolean = false,
-    /** Set when the establishments come from the copy saved at that time instead of the server. */
+    /** Time of the saved copy when offline. */
     val savedAt: Instant? = null,
 )
 
 /**
- * "Mis establecimientos" in Perfil, same as iOS EstablishmentManagementView: the state of each
- * establishment and a form to request a new one with its pin. [onAccountChanged] refreshes the
- * app's tabs after the account is reloaded (an approval turns a student into a restaurant).
+ * Mis establecimientos (like iOS): status of each one and the request form with its pin.
+ * onAccountChanged refreshes the tabs after an approval (student -> restaurant).
  */
 @OptIn(FlowPreview::class)
 class EstablishmentsViewModel(
@@ -80,9 +79,9 @@ class EstablishmentsViewModel(
     private val location: LocationRepository,
     private val geocoder: AddressGeocoder,
     private val onAccountChanged: () -> Unit = {},
-    /** Saved establishments and the unsent request. null in demo mode. */
+    /** Saved establishments + unsent request. null in demo mode. */
     private val store: OfflineStore? = null,
-    /** Validated-connection changes: buttons turn off without signal and the state reloads when it returns. */
+    /** Offline turns the buttons off; the status reloads when the signal returns. */
     online: Flow<Boolean> = emptyFlow(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(EstablishmentsUiState())
@@ -94,7 +93,7 @@ class EstablishmentsViewModel(
             reloadAccount()
         }
         viewModelScope.launch {
-            // The request form is written to disk half a second after the owner stops typing.
+            // save the request 500 ms after the owner stops typing
             _state.map { it.form }
                 .distinctUntilChanged()
                 .drop(1)
@@ -118,7 +117,7 @@ class EstablishmentsViewModel(
         _state.update { it.copy(form = draft, formOpen = true, message = "Recuperamos tu solicitud sin enviar.") }
     }
 
-    /** "Actualizar estado": asks again whether an admin approved the requests. */
+    /** "Actualizar estado": check again if an admin approved. */
     fun refreshStatus() {
         if (_state.value.working) return
         _state.update { it.copy(working = true) }
@@ -156,12 +155,12 @@ class EstablishmentsViewModel(
         form.copy(paymentMethods = if (method in form.paymentMethods) form.paymentMethods - method else form.paymentMethods + method)
     }
 
-    /** "Buscar dirección": approximate pin from the address; the owner checks it on the map. */
+    /** "Buscar dirección": approximate pin, the owner checks it on the map. */
     fun findAddress() {
         val address = _state.value.form.address
         if (address.isBlank() || _state.value.geocoding) return
         if (_state.value.offline) {
-            // The address search uses Google's servers; the GPS and the map pin work without signal.
+            // geocoding needs internet, the GPS and the map pin don't
             _state.update { it.copy(pinMessage = GEOCODE_OFFLINE_MESSAGE) }
             return
         }
@@ -185,7 +184,7 @@ class EstablishmentsViewModel(
         }
     }
 
-    /** "Usar mi ubicación": called once the location permission is granted. */
+    /** "Usar mi ubicación", after the permission is granted. */
     fun useMyLocation() {
         if (_state.value.locating) return
         _state.update { it.copy(locating = true, pinMessage = null) }
@@ -222,7 +221,7 @@ class EstablishmentsViewModel(
         if (!form.canSubmit || _state.value.working) return
         _state.update { it.copy(working = true) }
         viewModelScope.launch {
-            // Without a pin the address is tried; if that fails too, the request goes without coordinates.
+            // no pin: try the address, if that fails send it without coordinates
             val pin = form.pin ?: geocoder.find(form.address)
             val body = EstablishmentRequestBody(
                 name = form.name.trim(),
@@ -237,7 +236,7 @@ class EstablishmentsViewModel(
             try {
                 establishments.request(body)
                 store?.remove(DRAFT_KEY)
-                // The request already exists: if reloading fails it must not look like the send failed.
+                // already sent: a failed reload shouldn't look like a failed send
                 reloadAccount()
                 _state.update {
                     it.copy(
@@ -249,7 +248,7 @@ class EstablishmentsViewModel(
                     )
                 }
             } catch (e: ApiException) {
-                // Network only: an admin approves what the server has, so the request is never queued.
+                // network only: the admin approves what's on the server, never queued
                 val offline = e.code == ApiException.OFFLINE
                 _state.update {
                     it.copy(
@@ -262,10 +261,7 @@ class EstablishmentsViewModel(
         }
     }
 
-    /**
-     * GET /me: role and memberships. Returns false when it fails. Without signal it shows the last
-     * copy saved (network falling back to cache) instead of a generic error.
-     */
+    /** GET /me. false if it fails. Offline it uses the saved copy (network falling back to cache). */
     private suspend fun reloadAccount(): Boolean = try {
         val me = profiles.me()
         store?.save(ACCOUNT_KEY, MeResponse.serializer(), me)
@@ -303,7 +299,7 @@ class EstablishmentsViewModel(
     }
 }
 
-/** Same rule as iOS and api-v1: empty, or an HTTPS link of at most 500 characters without user or password. */
+/** Same as iOS and api-v1: empty, or https, max 500 chars, no user or password. */
 internal fun isValidPhotoUrl(raw: String): Boolean {
     val value = raw.trim()
     if (value.isEmpty()) return true

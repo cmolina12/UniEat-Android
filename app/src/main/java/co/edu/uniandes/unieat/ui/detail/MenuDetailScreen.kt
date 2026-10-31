@@ -260,7 +260,7 @@ private fun MenuBody(
             Validity.Expired -> Sticker("Vencido", color = Palette.Coral, icon = Icons.Filled.Warning)
         }
         if (menu.pendingReports > 0) Sticker("Reporte pendiente", color = Palette.Coral, icon = Icons.Filled.Info)
-        // Saved in Room without internet; disappears by itself when the worker sends it.
+        // in Room until the worker sends it, then it disappears by itself
         if (queuedReports > 0) {
             Sticker(
                 if (queuedReports == 1) "1 reporte esperando señal" else "$queuedReports reportes esperando señal",

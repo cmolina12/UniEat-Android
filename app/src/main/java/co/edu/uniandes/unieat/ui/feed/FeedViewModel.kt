@@ -35,8 +35,8 @@ sealed interface FeedUiState {
     /**
      * Menus in backend rank-v1 order, already without expired or closed ones. Empty = no match.
      * [clockOffset] = server time − device time, so "vigente/por vencer" follows the server clock.
-     * [savedAt] is set when the menus come from the last saved copy: offline, or while [refreshing].
-     * [refreshing]: the saved copy is shown at once while the request is still on its way (slow signal).
+     * [savedAt]: menus from the saved copy (offline, or while [refreshing]).
+     * [refreshing]: saved copy shown while the request is still running (slow signal).
      */
     data class Content(
         val menus: List<DailyMenu>,
@@ -65,11 +65,7 @@ class FeedViewModel(
     /** BQ-01 load telemetry (Samuel). Optional so the existing tests keep their constructor. */
     private val telemetry: FeedLoadTelemetry? = null,
     private val cache: FeedCache? = null,
-    /**
-     * Validated-connection changes. Losing the signal turns the menus on screen into the saved copy (with its
-     * time), so the student is told they may be out of date; going back online reloads an offline error or a
-     * saved copy.
-     */
+    /** Offline: the menus on screen become the saved copy with its time. Back online: reload. */
     online: Flow<Boolean>? = null,
 ) : ViewModel() {
 
@@ -101,12 +97,12 @@ class FeedViewModel(
         }
     }
 
-    /** The live menus were saved when they arrived; that copy carries the time for the offline notice. */
+    /** The live menus were saved when they arrived, that copy has the time for the notice. */
     private suspend fun markAsSavedCopy() {
         val live = _state.value as? FeedUiState.Content ?: return
         if (live.savedAt != null) return
         val saved = cache?.load(sharedFilters.value) ?: return
-        // A new load may have started while the copy was read; it owns the state then.
+        // a new load may have started meanwhile, then it owns the state
         if (_state.value === live) _state.value = savedCopy(saved)
     }
 
@@ -150,8 +146,8 @@ class FeedViewModel(
     /** Fetches the feed. The ranking comes from the backend; here we only hide inactive menus. */
     private suspend fun fetch(filters: FeedFilters) {
         val attempt = telemetry?.start()
-        // Cache then network: with a saved copy for these filters the student sees menus at once, even on a
-        // weak signal; the request replaces them, or the copy stays with its offline notice if it fails.
+        // cache then network: saved copy for these filters right away, the request replaces it
+        // or the copy stays with the offline notice if it fails
         val saved = cache?.load(filters)
         _state.value = saved?.let { savedCopy(it).copy(refreshing = true) } ?: FeedUiState.Loading
         _recommendationIndex.value = 0 // a new load starts again at the backend's best option
@@ -177,7 +173,7 @@ class FeedViewModel(
         }
     }
 
-    /** The saved copy keeps the clock offset it had when it was saved, so validity still follows the server. */
+    /** Keeps the clock offset from when it was saved, so validity still follows the server. */
     private fun savedCopy(saved: CachedFeed): FeedUiState.Content {
         val deviceNow = deviceClock()
         val offset = savedClockOffset(saved.savedAt, saved.response.serverNow, deviceNow)

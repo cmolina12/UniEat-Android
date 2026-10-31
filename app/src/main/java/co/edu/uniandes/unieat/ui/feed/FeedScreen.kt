@@ -208,7 +208,7 @@ private fun FilterButton(onClick: () -> Unit) {
     )
 }
 
-/** One feed card: photo (or drawing), name, price, the BQ-06 wait estimate and the backend's rank explanation. */
+/** Feed card: photo, name, price, the BQ-06 wait and the rank explanation. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MenuCard(menu: DailyMenu, now: Instant, onClick: () -> Unit) {
