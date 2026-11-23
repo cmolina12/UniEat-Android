@@ -23,6 +23,9 @@ import kotlinx.serialization.Serializable
 @Serializable object Performance
 @Serializable object Profile
 
+/** Sprint 4 (Samuel): the saved menus list, opened from Perfil. */
+@Serializable object Saved
+
 enum class Tab(val route: Any, val label: String, val icon: ImageVector) {
     FEED(Feed, "Hoy", Icons.Filled.Home),
     RECOMMEND(Recommend, "Elige por mí", Icons.Filled.Star),

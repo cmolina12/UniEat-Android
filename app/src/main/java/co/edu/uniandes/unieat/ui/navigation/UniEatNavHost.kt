@@ -57,6 +57,8 @@ import co.edu.uniandes.unieat.ui.profile.EstablishmentsSection
 import co.edu.uniandes.unieat.ui.profile.EstablishmentsViewModel
 import co.edu.uniandes.unieat.ui.publish.PublishScreen
 import co.edu.uniandes.unieat.ui.publish.PublishViewModel
+import co.edu.uniandes.unieat.ui.saved.SavedMenusEntry
+import co.edu.uniandes.unieat.ui.saved.SavedMenusScreen
 import co.edu.uniandes.unieat.ui.theme.Palette
 import kotlinx.coroutines.launch
 
@@ -174,6 +176,12 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSessionExpired = expireSession,
                 )
             }
+            composable<Saved> { entry ->
+                SavedMenusScreen(
+                    onBack = navController::popBackStack,
+                    onOpenMenu = { id -> navController.navigateFrom(entry, Detail(id)) },
+                )
+            }
             composable<Profile> {
                 val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(
                             container.profileRepository,
@@ -185,6 +193,8 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     vm = vm,
                     onSignedOut = { navController.navigate(Login) { popUpTo(0) { inclusive = true } } },
                     roleSections = { me ->
+                        // Sprint 4 (Samuel): saved menus, for every role.
+                        SavedMenusEntry(onOpen = { navController.navigate(Saved) })
                         if (me.role == "admin") {
                             val admin: AdminViewModel = viewModel(
                                 factory = simpleFactory {

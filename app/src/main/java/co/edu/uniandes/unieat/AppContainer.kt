@@ -46,6 +46,7 @@ import co.edu.uniandes.unieat.data.pilot.LocalCachePilotRepository
 import co.edu.uniandes.unieat.data.pilot.PilotEventTracker
 import co.edu.uniandes.unieat.data.pilot.RemoteCachePilotRepository
 import co.edu.uniandes.unieat.data.pilot.WorkManagerCachePilotScheduler
+import co.edu.uniandes.unieat.data.saved.SavedMenus
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
@@ -179,6 +180,9 @@ class AppContainer(
 
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
 
+    /** Sprint 4 (Samuel): menus the student saved, in Room. Local only, so it works with or without signal. */
+    val savedMenus: SavedMenus by lazy { SavedMenus(database.bookmarkedMenus()) }
+
     val analyticsRepository: AnalyticsRepository by lazy {
         (if (usesFakeData) DevDataSource.analyticsRepository() else null) ?: RemoteAnalyticsRepository(apiClient)
     }
@@ -263,6 +267,8 @@ class AppContainer(
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
                 if (!usesFakeData) cachePilot.clear()
+                // Saved menus belong to the account too. Demo mode keeps them for the same reason as the pilot.
+                if (!usesFakeData) savedMenus.clear()
             }
         }
     }
