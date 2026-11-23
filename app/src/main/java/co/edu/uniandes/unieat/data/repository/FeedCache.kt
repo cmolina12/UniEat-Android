@@ -65,19 +65,28 @@ class FileFeedCache(private val dir: File) : FeedCache {
         }
     }
 
+    /**
+     * Newest saved copy of the menu. Files are visited newest first (the file's modified time is the moment
+     * [save] wrote it) and the search stops at the first copy found, so a menu present in every saved feed
+     * decodes one file instead of all of them. A file whose text does not contain the id is skipped without
+     * being decoded: the id is always written verbatim in the JSON, so this can only skip files without it.
+     */
     override suspend fun findMenu(id: String): SavedMenu? = io {
         dir.listFiles().orEmpty()
-            .mapNotNull { file ->
+            .sortedByDescending { it.lastModified() }
+            .firstNotNullOfOrNull { file ->
                 try {
-                    UniEatJson.decodeFromString(CachedFeed.serializer(), file.readText())
+                    val text = file.readText()
+                    if (!text.contains(id)) {
+                        null
+                    } else {
+                        val entry = UniEatJson.decodeFromString(CachedFeed.serializer(), text)
+                        entry.response.menus.firstOrNull { it.id == id }
+                            ?.let { SavedMenu(it, entry.response.serverNow, entry.savedAt) }
+                    }
                 } catch (_: Exception) {
                     null
                 }
-            }
-            .sortedByDescending { it.savedAt }
-            .firstNotNullOfOrNull { entry ->
-                entry.response.menus.firstOrNull { it.id == id }
-                    ?.let { SavedMenu(it, entry.response.serverNow, entry.savedAt) }
             }
     }
 

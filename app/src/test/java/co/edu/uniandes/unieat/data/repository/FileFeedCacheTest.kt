@@ -63,9 +63,26 @@ class FileFeedCacheTest {
         cache.save(CachedFeed(FeedFilters(area = "Sur"), FeedResponse(now, now, menus = listOf(menu)), savedAt = now))
         val newer = menu.copy(title = "Nuevo")
         cache.save(CachedFeed(FeedFilters(), FeedResponse(now, now, menus = listOf(newer)), savedAt = now + Duration.ofMinutes(5)))
+        // Both files are written within the same millisecond; findMenu orders by modified time, so set it.
+        val files = folder.root.listFiles()!!
+        files.first { it.readText().contains("Nuevo") }.setLastModified(System.currentTimeMillis())
+        files.first { !it.readText().contains("Nuevo") }.setLastModified(System.currentTimeMillis() - 60_000)
 
         assertEquals("Nuevo", cache.findMenu("a")?.menu?.title)
         assertNull(cache.findMenu("missing"))
+    }
+
+    @Test fun `findMenu skips files without the menu and still finds it in an older file`() = runTest {
+        val cache = FileFeedCache(folder.root)
+        val other = menu.copy(id = "b", title = "Otro")
+        cache.save(CachedFeed(FeedFilters(area = "Sur"), FeedResponse(now, now, menus = listOf(menu)), savedAt = now))
+        cache.save(CachedFeed(FeedFilters(), FeedResponse(now, now, menus = listOf(other)), savedAt = now + Duration.ofMinutes(5)))
+        val files = folder.root.listFiles()!!
+        files.first { it.readText().contains("Otro") }.setLastModified(System.currentTimeMillis())
+        files.first { !it.readText().contains("Otro") }.setLastModified(System.currentTimeMillis() - 60_000)
+
+        assertEquals("Menú a", cache.findMenu("a")?.menu?.title)
+        assertEquals("Otro", cache.findMenu("b")?.menu?.title)
     }
 
     @Test fun `a corrupt file is treated as no copy`() = runTest {
