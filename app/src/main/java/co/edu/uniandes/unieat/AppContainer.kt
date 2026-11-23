@@ -47,11 +47,17 @@ import co.edu.uniandes.unieat.data.pilot.PilotEventTracker
 import co.edu.uniandes.unieat.data.pilot.RemoteCachePilotRepository
 import co.edu.uniandes.unieat.data.pilot.WorkManagerCachePilotScheduler
 import co.edu.uniandes.unieat.data.saved.SavedMenus
+import co.edu.uniandes.unieat.data.telemetry.CrashRepository
+import co.edu.uniandes.unieat.data.telemetry.CrashTelemetry
+import co.edu.uniandes.unieat.data.telemetry.CrashUploader
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
+import co.edu.uniandes.unieat.data.telemetry.LocalCrashRepository
 import co.edu.uniandes.unieat.data.telemetry.LocalFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.RemoteCrashRepository
 import co.edu.uniandes.unieat.data.telemetry.RemoteFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.WorkManagerCrashScheduler
 import co.edu.uniandes.unieat.data.telemetry.WorkManagerFeedLoadScheduler
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
@@ -153,6 +159,19 @@ class AppContainer(
 
     val feedLoadUploader: FeedLoadUploader by lazy { FeedLoadUploader(feedLoadTelemetry, feedLoadRepository) }
 
+    // BQ-02 (Samuel): CrashTelemetry (disk, written by the uncaught-exception handler) → WorkManager →
+    // CrashUploader → POST /telemetry/crashes. Same layers as BQ-01.
+    val crashTelemetry: CrashTelemetry by lazy { CrashTelemetry(context, onCrash = { crashScheduler.schedule() }) }
+
+    val crashScheduler: FlushScheduler by lazy { WorkManagerCrashScheduler(context) }
+
+    val crashRepository: CrashRepository by lazy {
+        val local = LocalCrashRepository(crashTelemetry)
+        if (usesFakeData) local else RemoteCrashRepository(apiClient, local)
+    }
+
+    val crashUploader: CrashUploader by lazy { CrashUploader(crashTelemetry, crashRepository) }
+
     /** Feed filters shared by "Hoy" and "Elige por mí": both ViewModels observe this same flow. */
     val feedFilters = MutableStateFlow(FeedFilters())
 
@@ -202,6 +221,8 @@ class AppContainer(
         PilotEventTracker(queued) { kind ->
             val at = System.currentTimeMillis()
             appScope.launch { cachePilot.onInteraction(kind, at) }
+            // BQ-02: the last tracked event is the "preceding action" of a crash.
+            crashTelemetry.onAction(kind.wireName)
         }
     }
 

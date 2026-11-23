@@ -15,6 +15,8 @@ import co.edu.uniandes.unieat.data.pilot.CachePilotReport
 import co.edu.uniandes.unieat.data.pilot.CachePilotRepository
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import co.edu.uniandes.unieat.data.telemetry.CrashReport
+import co.edu.uniandes.unieat.data.telemetry.CrashRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import androidx.collection.SparseArrayCompat
@@ -51,6 +53,8 @@ sealed interface PerformanceUiState {
         /** BQ-13 (Samuel): cache pilot comparison; admins only, null if it could not be loaded. */
         val cachePilot: CachePilotReport? = null,
         val lineCongestion: List<CongestionRow>? = null,
+        /** BQ-02 (Samuel): crashes per 1,000 sessions by screen and action; admins only, null if it fails. */
+        val crashReport: CrashReport? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -83,6 +87,8 @@ class PerformanceViewModel(
     /** BQ-13 (Samuel): optional card, like BQ-01; its failure never hides the rest of the dashboard. */
     private val cachePilot: CachePilotRepository? = null,
     private val menus: MenuRepository? = null,
+    /** BQ-02 (Samuel): optional card like BQ-01; its failure never hides the rest of the dashboard. */
+    private val crashes: CrashRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow<PerformanceUiState>(PerformanceUiState.Loading)
     val state: StateFlow<PerformanceUiState> = _state.asStateFlow()
@@ -147,6 +153,8 @@ class PerformanceViewModel(
                     val completeness = async { locationCompleteness(days) }
                     // BQ-13 (Samuel): a fifth child coroutine on IO, in parallel with the other four.
                     val pilot = async { if (role == ROLE_ADMIN) cachePilotReport(days) else null }
+                    // BQ-02 (Samuel): a sixth child coroutine, admin only, always the last 7 days.
+                    val crash = async { if (role == ROLE_ADMIN) crashReport() else null }
                     val congestion = async {
                         if (role == ROLE_ADMIN && menus != null) {
                             runCatching {
@@ -162,6 +170,7 @@ class PerformanceViewModel(
                         summary.await(), feedLoad.await(), restaurant, guidance.await(), completeness.await(),
                         cachePilot = pilot.await(),
                         lineCongestion = congestion.await(),
+                        crashReport = crash.await(),
                     )
                 }
                 byPeriod.put(days, content)
@@ -208,6 +217,10 @@ class PerformanceViewModel(
     /** BQ-01: admin only (the endpoint is admin-only) and always 7 days. */
     private suspend fun feedLoadReport(): FeedLoadReport? =
         feedLoads?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
+
+    /** BQ-02: admin only, like BQ-01, and always 7 days (the question asks for the last seven days). */
+    private suspend fun crashReport(): CrashReport? =
+        crashes?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
 
     private suspend fun locationGuidance(days: Int, restaurant: Boolean): LocationGuidanceSnapshot? {
         if (!showLocationGuidance) return null
@@ -257,6 +270,7 @@ class PerformanceViewModel(
                     online = app.container.connectivity.online,
                     cachePilot = app.container.cachePilotRepository,
                     menus = app.container.menuRepository,
+                    crashes = app.container.crashRepository,
                 )
             }
         }
