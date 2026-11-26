@@ -48,11 +48,14 @@ import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
 import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.favorites.FavoritesScreen
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
+import co.edu.uniandes.unieat.ui.feed.FeedStatusCard
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.myreports.MyReportsEntry
 import co.edu.uniandes.unieat.ui.myreports.MyReportsScreen
 import co.edu.uniandes.unieat.ui.myreports.ReportedPlaceScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
+import co.edu.uniandes.unieat.ui.performance.PublicationTimingScreen
+import co.edu.uniandes.unieat.ui.performance.PublicationTimingViewModel
 import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
 import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
 import co.edu.uniandes.unieat.ui.profile.AdminViewModel
@@ -97,7 +100,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
     }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
-    val role = (profileState as? AppProfileState.Content)?.profile?.role
+    val profile = (profileState as? AppProfileState.Content)?.profile
+    val role = profile?.role
+    val signedInId = (authState as? AuthState.SignedIn)?.session?.userId
     val visibleTabs = Tab.entries.filter { it.allowedFor(role, container.usesFakeData) }
     val showTabs = visibleTabs.any { destination.isOn(it) }
 
@@ -181,11 +186,14 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                 )
                 PublishScreen(vm = vm, onSessionExpired = expireSession)
             }
-            composable<Performance> {
+            composable<Performance> { entry ->
                 PerformanceScreen(
                     role = role,
-                    userId = (profileState as? AppProfileState.Content)?.profile?.id,
+                    userId = profile?.id,
                     onSessionExpired = expireSession,
+                    onOpenPublicationTiming = if (role == "restaurant" && signedInId != null && profile?.id == signedInId) {
+                        { navController.navigateFrom(entry, PublicationTiming) }
+                    } else null,
                 )
             }
             composable<Saved> { entry ->
@@ -212,6 +220,25 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onBack = navController::popBackStack,
                     onSessionExpired = expireSession,
                 )
+            }
+            composable<PublicationTiming> {
+                if (profile?.role == "restaurant" && signedInId != null && profile.id == signedInId) {
+                    val vm: PublicationTimingViewModel = viewModel(key = "publication-timing:$signedInId", factory = simpleFactory {
+                        PublicationTimingViewModel(
+                            userId = signedInId,
+                            currentUserId = { (container.sessionManager.state.value as? AuthState.SignedIn)?.session?.userId },
+                            fetch = { container.apiClient.get("restaurant/publication-timing") },
+                            online = container.connectivity.online,
+                            store = container.offlineStore,
+                        )
+                    })
+                    val approvedIds = profile.establishments.filter { it.approved }.map { it.establishmentId }.toSet()
+                    PublicationTimingScreen(vm, approvedIds, onBack = { navController.popBackStack() }, onSessionExpired = expireSession)
+                } else {
+                    FeedStatusCard(title = "Solo restaurantes", body = "Esta consulta requiere una cuenta de restaurante.") {
+                        TextButton(onClick = { navController.popBackStack() }) { Text("Volver") }
+                    }
+                }
             }
             composable<Profile> {
                 val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(

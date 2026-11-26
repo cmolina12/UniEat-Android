@@ -21,6 +21,7 @@ import kotlinx.serialization.Serializable
 @Serializable object Favorites
 @Serializable object Publish
 @Serializable object Performance
+@Serializable object PublicationTiming
 @Serializable object Profile
 
 /** Sprint 4 (Samuel): the saved menus list, opened from Perfil. */
