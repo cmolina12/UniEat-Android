@@ -8,26 +8,27 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.DailyMenu
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurant
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
+import co.edu.uniandes.unieat.data.local.Favorite
+import co.edu.uniandes.unieat.data.local.Favorites
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class FavoriteRow(val favorite: FavoriteRestaurant, val todayMenu: DailyMenu?)
+data class FavoriteRow(val favorite: Favorite, val menu: DailyMenu?)
 
 sealed interface FavoritesUiState {
     data object Loading : FavoritesUiState
 
-    data class Content(val rows: List<FavoriteRow>, val menusError: String? = null) : FavoritesUiState
+    data class Content(val rows: List<FavoriteRow>, val error: String? = null) : FavoritesUiState
 }
 
 class FavoritesViewModel(
-    private val favorites: FavoriteRestaurants,
+    private val favorites: Favorites,
     private val menus: MenuRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow<FavoritesUiState>(FavoritesUiState.Loading)
@@ -37,15 +38,30 @@ class FavoritesViewModel(
 
     fun load() {
         loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            val saved = favorites.all()
-            _state.value = try {
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            val today = mutableListOf<DailyMenu>()
+            var error: String? = null
+            try {
                 val feed = menus.feedForDashboard()
-                val today = feed.menus.filter { it.isActive(feed.serverNow) }
-                FavoritesUiState.Content(saved.map { f -> FavoriteRow(f, today.firstOrNull { it.establishmentId == f.establishmentId }) })
+                for (menu in feed.menus) {
+                    if (menu.isActive(feed.serverNow)) today.add(menu)
+                }
             } catch (e: ApiException) {
-                FavoritesUiState.Content(saved.map { FavoriteRow(it, null) }, menusError = e.error.message)
+                error = e.error.message
             }
+
+            val rows = mutableListOf<FavoriteRow>()
+            for (favorite in favorites.all()) {
+                var found: DailyMenu? = null
+                for (menu in today) {
+                    if (menu.establishmentId == favorite.id) {
+                        found = menu
+                        break
+                    }
+                }
+                rows.add(FavoriteRow(favorite, found))
+            }
+            _state.value = FavoritesUiState.Content(rows, error)
         }
     }
 

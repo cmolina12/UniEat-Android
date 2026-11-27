@@ -20,7 +20,7 @@ import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.local.DataStorePerformancePreferences
 import co.edu.uniandes.unieat.data.local.DataStoreProfileCache
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
+import co.edu.uniandes.unieat.data.local.Favorites
 import co.edu.uniandes.unieat.data.local.FileOfflineStore
 import co.edu.uniandes.unieat.data.local.FilePerformanceSnapshots
 import co.edu.uniandes.unieat.data.local.OfflineStore
@@ -131,7 +131,7 @@ class AppContainer(
         Room.databaseBuilder(context.applicationContext, WaitHistoryDatabase::class.java, "wait_history.db").build().records()
     }
 
-    val favorites by lazy { FavoriteRestaurants(context) }
+    val favorites by lazy { Favorites(context) }
 
     /** Offline copy of the feed. Not needed in demo mode. */
     val feedCache: FeedCache? by lazy {
