@@ -42,10 +42,12 @@ import co.edu.uniandes.unieat.core.model.ReportFilter
 import co.edu.uniandes.unieat.core.model.ReportedPlace
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
+import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.SolidButton
 import co.edu.uniandes.unieat.ui.theme.Sticker
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
+import java.time.Instant
 
 /** Mis reportes (Camilo, Sprint 4): one row per place, with how many reports are in each status. */
 @Composable
@@ -71,6 +73,7 @@ fun MyReportsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        state.savedAt?.let { item { SavedNotice(it, state.loading) } }
         if (state.places.isNotEmpty()) item { Summary(state.totalReports, state.totalConfirmed) }
         item { FilterChips(state, vm::selectFilter) }
         state.error?.let { message ->
@@ -107,6 +110,13 @@ internal fun ScreenHeader(title: String, onBack: () -> Unit, subtitle: String = 
         }
         Box(Modifier.weight(1f)) { BrandHeader(title, subtitle) }
     }
+}
+
+/** Rows from the phone: says when they were saved, and whether a fresh copy is on its way. */
+@Composable
+internal fun SavedNotice(savedAt: Instant, refreshing: Boolean) {
+    val time = SpanishPresentation.dateAndTime(savedAt)
+    DemoNotice(if (refreshing) "Actualizando… · mientras tanto, copia guardada el $time" else "Copia guardada el $time")
 }
 
 @Composable

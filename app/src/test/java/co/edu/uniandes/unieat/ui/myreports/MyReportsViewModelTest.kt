@@ -7,6 +7,8 @@ import co.edu.uniandes.unieat.core.model.ReportedPlace
 import co.edu.uniandes.unieat.core.model.ReportedPlaceResponse
 import co.edu.uniandes.unieat.core.model.ReportedPlacesResponse
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
+import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
+import co.edu.uniandes.unieat.data.myreports.ReportHistoryStoreTest
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +83,47 @@ class MyReportsViewModelTest {
         vm.load()
         advanceUntilIdle()
         assertNull(vm.state.value.error)
+    }
+
+    @Test
+    fun withoutAnAnswerTheListComesFromThePhoneWithItsTime() = runTest(dispatcher) {
+        val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
+        MyReportsViewModel(Repo(places = listOf(place("a", pending = 1))), store)
+        advanceUntilIdle()
+
+        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE), store)
+        advanceUntilIdle()
+
+        assertEquals(listOf("a"), vm.state.value.places.map { it.establishmentId })
+        assertEquals(now, vm.state.value.savedAt)
+    }
+
+    @Test
+    fun aFreshAnswerReplacesTheSavedCopy() = runTest(dispatcher) {
+        val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
+        store.savePlaces(listOf(place("old", pending = 1)))
+
+        val vm = MyReportsViewModel(Repo(places = listOf(place("new", confirmed = 1))), store)
+        advanceUntilIdle()
+
+        assertEquals(listOf("new"), vm.state.value.places.map { it.establishmentId })
+        assertNull(vm.state.value.savedAt)
+        assertEquals(listOf("new"), store.loadPlaces()!!.places.map { it.establishmentId })
+    }
+
+    @Test
+    fun aPlaceOpensFromThePhoneWithoutSignal() = runTest(dispatcher) {
+        val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
+        store.savePlaces(listOf(place("a", total = 1)))
+        // opened once with signal: its reports are saved
+        ReportedPlaceViewModel("a", Repo(places = listOf(place("a", total = 1))), store)
+        advanceUntilIdle()
+
+        val vm = ReportedPlaceViewModel("a", Repo(error = ApiException.OFFLINE), store)
+        advanceUntilIdle()
+
+        assertEquals(listOf("r-a"), vm.state.value.reports.map { it.id })
+        assertEquals(now, vm.state.value.savedAt)
     }
 
     @Test
