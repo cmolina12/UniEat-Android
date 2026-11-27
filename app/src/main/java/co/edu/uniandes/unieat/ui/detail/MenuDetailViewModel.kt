@@ -173,13 +173,6 @@ class MenuDetailViewModel(
     val queuedReports: StateFlow<Int> = (reportQueue?.pendingFor(menuId) ?: flowOf(0))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val isFavorite: StateFlow<Boolean?> = _state
-        .map { (it as? MenuDetailUiState.Content)?.menu?.establishmentId }
-        .distinctUntilChanged()
-        .flatMapLatest { id -> if (id == null || favorites == null) flowOf(null) else favorites.isFavorite(id) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
     private var openTracked = false
 
     init {
@@ -359,18 +352,20 @@ class MenuDetailViewModel(
         _selected.value = true
     }
 
-    fun toggleFavorite() {
-        val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
-        val store = favorites ?: return
-        val wasFavorite = isFavorite.value ?: return
-        viewModelScope.launch {
-            if (wasFavorite) {
-                store.delete(menu.establishmentId)
-            } else {
-                store.insert(FavoriteRestaurant(menu.establishmentId, menu.establishmentName, menu.area, deviceClock().toEpochMilli()))
-                eventTracker.track(EventKind.FAVORITE, menu, SCREEN)
-            }
+    fun isFavorite(menu: DailyMenu): Boolean {
+        if (favorites == null) return false
+        return favorites.isFavorite(menu.establishmentId)
+    }
+
+    fun toggleFavorite(menu: DailyMenu): Boolean {
+        if (favorites == null) return false
+        if (favorites.isFavorite(menu.establishmentId)) {
+            favorites.remove(menu.establishmentId)
+            return false
         }
+        favorites.add(FavoriteRestaurant(menu.establishmentId, menu.establishmentName, menu.area))
+        eventTracker.track(EventKind.FAVORITE, menu, SCREEN)
+        return true
     }
 
     private fun distanceFlow(pinState: PinState, access: LocationAccess, enabled: Boolean): Flow<DistanceStatus> {

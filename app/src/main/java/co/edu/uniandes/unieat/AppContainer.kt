@@ -131,7 +131,7 @@ class AppContainer(
         Room.databaseBuilder(context.applicationContext, WaitHistoryDatabase::class.java, "wait_history.db").build().records()
     }
 
-    val favorites = FavoriteRestaurants()
+    val favorites by lazy { FavoriteRestaurants(context) }
 
     /** Offline copy of the feed. Not needed in demo mode. */
     val feedCache: FeedCache? by lazy {
@@ -258,7 +258,7 @@ class AppContainer(
                     arrivalCache.evictAll()
                     waitRecords.deleteAll()
                     clearSentReports(context)
-                    favorites.deleteAll()
+                    favorites.clear()
                 }
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
