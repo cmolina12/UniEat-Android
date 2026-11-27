@@ -153,7 +153,7 @@ class PerformanceViewModel(
                     val completeness = async { locationCompleteness(days) }
                     // BQ-13 (Samuel): a fifth child coroutine on IO, in parallel with the other four.
                     val pilot = async { if (role == ROLE_ADMIN) cachePilotReport(days) else null }
-                    // BQ-02 (Samuel): a sixth child coroutine, admin only, always the last 7 days.
+                    // BQ-02 (Samuel): a seventh child coroutine, admin only, always the last 7 days.
                     val crash = async { if (role == ROLE_ADMIN) crashReport() else null }
                     val congestion = async {
                         if (role == ROLE_ADMIN && menus != null) {

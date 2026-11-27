@@ -121,7 +121,7 @@ Privacy: saved menus are emptied on sign-out (`AppContainer`); crash records con
 | **Coroutines with dispatchers** | `SavedMenus` uses `withContext(IO)`; Room `Flow`s run on Room's executor; the screen only collects | The main thread never waits for the disk. |
 | **Background worker** | `CrashUploadWorker` (`CoroutineWorker`) | Upload outside any screen; survives the app closing. |
 | **Synchronized blocks in the crash path** | `CrashTelemetry` | The crash handler (any thread), the navigation listener (main) and the worker (IO) write the same files; one lock keeps them from overwriting each other. |
-| **Parallel child coroutines** | `PerformanceViewModel.load`: a sixth `async` for BQ-02 | The dashboard waits for the slowest request, not the sum. |
+| **Parallel child coroutines** | `PerformanceViewModel.load`: a seventh `async` for BQ-02 (seven requests in parallel in total) | The dashboard waits for the slowest request, not the sum. |
 | Mutex for token refresh, BQ-13 visit (Sprints 2–3) | `SessionManager`, `CachePilot` | See `sprint3-samuel.md`. |
 
 ## 8. Caching
