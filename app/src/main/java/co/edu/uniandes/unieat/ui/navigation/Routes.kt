@@ -26,6 +26,10 @@ import kotlinx.serialization.Serializable
 /** Sprint 4 (Samuel): the saved menus list, opened from Perfil. */
 @Serializable object Saved
 
+/** Sprint 4 (Camilo): Mis reportes, opened from Perfil, and one place of it. */
+@Serializable object MyReports
+@Serializable data class ReportedPlaceRoute(val establishmentId: String, val name: String, val area: String)
+
 enum class Tab(val route: Any, val label: String, val icon: ImageVector) {
     FEED(Feed, "Hoy", Icons.Filled.Home),
     RECOMMEND(Recommend, "Elige por mí", Icons.Filled.Star),

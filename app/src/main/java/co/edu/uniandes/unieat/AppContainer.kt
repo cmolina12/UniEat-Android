@@ -60,6 +60,9 @@ import co.edu.uniandes.unieat.data.telemetry.RemoteFeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.WorkManagerCrashScheduler
 import co.edu.uniandes.unieat.data.telemetry.WorkManagerFeedLoadScheduler
 import co.edu.uniandes.unieat.data.location.LocationRepository
+import co.edu.uniandes.unieat.data.myreports.EmptyMyReportsRepository
+import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
+import co.edu.uniandes.unieat.data.myreports.RemoteMyReportsRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.repository.FeedCache
@@ -195,6 +198,11 @@ class AppContainer(
     /** Saved lists and drafts of Publicar, Mis establecimientos and Admin. */
     val offlineStore: OfflineStore? by lazy {
         if (usesFakeData) null else FileOfflineStore(File(context.filesDir, "offline"))
+    }
+
+    /** Mis reportes (Camilo, Sprint 4). Demo mode has no account, so its history is empty. */
+    val myReportsRepository: MyReportsRepository by lazy {
+        if (usesFakeData) EmptyMyReportsRepository else RemoteMyReportsRepository(apiClient)
     }
 
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }

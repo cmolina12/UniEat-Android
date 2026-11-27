@@ -49,6 +49,9 @@ import co.edu.uniandes.unieat.ui.detail.RecommendationNote
 import co.edu.uniandes.unieat.ui.favorites.FavoritesScreen
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
+import co.edu.uniandes.unieat.ui.myreports.MyReportsEntry
+import co.edu.uniandes.unieat.ui.myreports.MyReportsScreen
+import co.edu.uniandes.unieat.ui.myreports.ReportedPlaceScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
 import co.edu.uniandes.unieat.ui.profile.AdminApprovalsSection
 import co.edu.uniandes.unieat.ui.profile.AdminRolesSection
@@ -190,6 +193,25 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onOpenMenu = { id -> navController.navigateFrom(entry, Detail(id)) },
                 )
             }
+            composable<MyReports> { entry ->
+                MyReportsScreen(
+                    onBack = navController::popBackStack,
+                    onOpenPlace = { place ->
+                        navController.navigateFrom(entry, ReportedPlaceRoute(place.establishmentId, place.name, place.area))
+                    },
+                    onSessionExpired = expireSession,
+                )
+            }
+            composable<ReportedPlaceRoute> {
+                val route = it.toRoute<ReportedPlaceRoute>()
+                ReportedPlaceScreen(
+                    establishmentId = route.establishmentId,
+                    name = route.name,
+                    area = route.area,
+                    onBack = navController::popBackStack,
+                    onSessionExpired = expireSession,
+                )
+            }
             composable<Profile> {
                 val vm: ProfileViewModel = viewModel(factory = simpleFactory { ProfileViewModel(
                             container.profileRepository,
@@ -203,6 +225,8 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     roleSections = { me ->
                         // Sprint 4 (Samuel): saved menus, for every role.
                         SavedMenusEntry(onOpen = { navController.navigate(Saved) })
+                        // Sprint 4 (Camilo): only students report, so only they have a history.
+                        if (me.role == "student") MyReportsEntry(onOpen = { navController.navigate(MyReports) })
                         if (me.role == "admin") {
                             val admin: AdminViewModel = viewModel(
                                 factory = simpleFactory {
