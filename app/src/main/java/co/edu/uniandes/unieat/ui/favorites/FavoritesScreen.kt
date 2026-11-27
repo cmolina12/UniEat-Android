@@ -56,7 +56,7 @@ fun FavoritesScreen(
                 CircularProgressIndicator(color = Palette.Ink)
             }
             is FavoritesUiState.Content -> {
-                current.error?.let { DemoNotice("No pudimos cargar los menús de hoy · $it") }
+                if (current.error != null) DemoNotice(current.error)
                 if (current.rows.isEmpty()) {
                     Text(
                         "Aún no tienes restaurantes favoritos. Toca el corazón en el detalle de un menú para guardarlo aquí.",

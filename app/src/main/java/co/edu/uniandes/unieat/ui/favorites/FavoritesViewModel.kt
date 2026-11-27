@@ -14,6 +14,7 @@ import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.MenuRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,11 +31,27 @@ sealed interface FavoritesUiState {
 class FavoritesViewModel(
     private val favorites: Favorites,
     private val menus: MenuRepository,
+    online: Flow<Boolean>,
 ) : ViewModel() {
     private val _state = MutableStateFlow<FavoritesUiState>(FavoritesUiState.Loading)
     val state: StateFlow<FavoritesUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            online.collect { isOnline ->
+                val current = _state.value
+                if (isOnline) {
+                    if (current is FavoritesUiState.Content) {
+                        if (current.error != null) {
+                            load()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fun load() {
         loadJob?.cancel()
@@ -47,7 +64,11 @@ class FavoritesViewModel(
                     if (menu.isActive(feed.serverNow)) today.add(menu)
                 }
             } catch (e: ApiException) {
-                error = e.error.message
+                if (e.code == ApiException.OFFLINE) {
+                    error = "Sin conexión. Tus favoritos están guardados en el teléfono. Los menús de hoy aparecen cuando vuelva la señal."
+                } else {
+                    error = "No pudimos cargar los menús de hoy. " + e.error.message
+                }
             }
 
             val rows = mutableListOf<FavoriteRow>()
@@ -69,7 +90,7 @@ class FavoritesViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                FavoritesViewModel(app.container.favorites, app.container.menuRepository)
+                FavoritesViewModel(app.container.favorites, app.container.menuRepository, app.container.connectivity.online)
             }
         }
     }
