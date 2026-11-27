@@ -153,6 +153,7 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onBack = navController::popBackStack,
                     onOpenMenu = { id -> navController.navigate(Detail(id)) { popUpTo<Detail> { inclusive = true } } },
                     onSessionExpired = expireSession,
+                    canReport = canSubmitReports(role),
                 )
             }
             composable<Recommend> { entry ->
@@ -273,6 +274,12 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = builder() as T
 }
+
+/**
+ * Only students report, like iOS: the backend answers 403 to restaurants and admins. An unknown role (profile not
+ * loaded yet, or offline) keeps reporting on, so a student without signal can still queue a report.
+ */
+internal fun canSubmitReports(role: String?): Boolean = role != "restaurant" && role != "admin"
 
 /** Tabs by role, like iOS: restaurants get "Publicar" instead of "Elige por mí". The backend still checks access. */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
