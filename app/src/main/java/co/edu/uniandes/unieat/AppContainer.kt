@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat
 
 import android.content.Context
+import android.os.Trace
 import androidx.collection.LruCache
 import androidx.room.Room
 import co.edu.uniandes.unieat.core.config.SupabaseConfig
@@ -222,7 +223,13 @@ class AppContainer(
         (if (usesFakeData) DevDataSource.analyticsRepository() else null) ?: RemoteAnalyticsRepository(apiClient)
     }
 
-    private val eventQueue by lazy { EventQueue(File(context.filesDir, "analytics/pending-events.json")) }
+    private val eventQueue by lazy {
+        EventQueue(
+            File(context.filesDir, "analytics/pending-events.jsonl"),
+            legacyFile = File(context.filesDir, "analytics/pending-events.json"),
+            trace = ::traced,
+        )
+    }
 
     val flushScheduler: FlushScheduler by lazy { WorkManagerFlushScheduler(context) }
 
@@ -316,5 +323,15 @@ class AppContainer(
     private companion object {
         /** Same id as FakeProfileRepository's demo profile. */
         const val DEMO_USER = "demo-user"
+    }
+}
+
+/** A named section in system traces (Perfetto / Android Studio System Trace); free when nobody is tracing. */
+private fun traced(name: String, block: () -> Unit) {
+    Trace.beginSection(name)
+    try {
+        block()
+    } finally {
+        Trace.endSection()
     }
 }
