@@ -61,7 +61,8 @@ import kotlin.math.roundToInt
 
 private const val NOTE_MAX = 280
 
-private val choices: List<Triple<ReportKind, String, ImageVector>> = listOf(
+/** Label and icon of each kind; Mis reportes uses the same ones so a report reads the same in both places. */
+internal val reportChoices: List<Triple<ReportKind, String, ImageVector>> = listOf(
     Triple(ReportKind.UNAVAILABLE, "Plato agotado o no disponible", Icons.Filled.Close),
     Triple(ReportKind.PRICE, "Precio distinto al publicado", Icons.Filled.ShoppingCart),
     Triple(ReportKind.LONG_LINE, "Fila mucho más larga", Icons.Filled.Person),
@@ -141,7 +142,7 @@ fun ReportSheet(
             }
 
             Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                choices.forEach { (choice, label, icon) ->
+                reportChoices.forEach { (choice, label, icon) ->
                     val selected = kind == choice
                     Row(
                         Modifier
