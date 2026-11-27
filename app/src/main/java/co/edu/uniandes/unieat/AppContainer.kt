@@ -208,7 +208,11 @@ class AppContainer(
     }
 
     private val eventQueue by lazy {
-        EventQueue(File(context.filesDir, "analytics/pending-events.json"), trace = ::traced)
+        EventQueue(
+            File(context.filesDir, "analytics/pending-events.jsonl"),
+            legacyFile = File(context.filesDir, "analytics/pending-events.json"),
+            trace = ::traced,
+        )
     }
 
     val flushScheduler: FlushScheduler by lazy { WorkManagerFlushScheduler(context) }

@@ -2,6 +2,7 @@ package co.edu.uniandes.unieat.data.analytics
 
 import co.edu.uniandes.unieat.core.model.BatchResponse
 import co.edu.uniandes.unieat.core.model.RemoteEvent
+import co.edu.uniandes.unieat.core.model.UniEatJson
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -9,9 +10,11 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -23,8 +26,9 @@ class EventPipelineTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private var now = Instant.parse("2026-09-29T17:00:00Z")
-    private fun queueFile() = tmp.root.resolve("analytics/pending-events.json")
-    private fun queue(maxEvents: Int = 1_000) = EventQueue(queueFile(), maxEvents = maxEvents, clock = { now })
+    private fun queueFile() = tmp.root.resolve("analytics/pending-events.jsonl")
+    private fun legacyFile() = tmp.root.resolve("analytics/pending-events.json")
+    private fun queue(maxEvents: Int = 1_000) = EventQueue(queueFile(), legacyFile(), maxEvents = maxEvents, clock = { now })
 
     private var counter = 0
     private fun event(at: Instant = now) = RemoteEvent(
@@ -50,6 +54,44 @@ class EventPipelineTest {
 
         val reopened = queue()
         assertEquals(listOf("e0", "e1"), reopened.peek(10).map { it.eventId })
+    }
+
+    @Test
+    fun addingAppendsOneLineInsteadOfRewritingTheQueue() = runTest {
+        val q = queue()
+        repeat(3) { q.add(event()) }
+        val before = queueFile().readText()
+
+        q.add(event())
+
+        // the old content is untouched, one line was added at the end
+        assertTrue(queueFile().readText().startsWith(before))
+        assertEquals(4, queueFile().readLines().size)
+    }
+
+    @Test
+    fun aQueueFromTheOldFormatIsKeptAndConverted() = runTest {
+        legacyFile().parentFile!!.mkdirs()
+        legacyFile().writeText(UniEatJson.encodeToString(ListSerializer(RemoteEvent.serializer()), listOf(event(), event())))
+
+        val q = queue()
+        q.add(event())
+
+        assertEquals(listOf("e0", "e1", "e2"), q.peek(10).map { it.eventId })
+        assertFalse(legacyFile().exists())
+        assertEquals(3, queueFile().readLines().size)
+    }
+
+    @Test
+    fun aLineCutByACrashIsDroppedAndTheRestKept() = runTest {
+        queue().apply { add(event()); add(event()) }
+        queueFile().appendText("{\"eventId\":\"cut") // the process died in the middle of an append
+
+        val reopened = queue()
+        reopened.add(event())
+
+        assertEquals(listOf("e0", "e1", "e2"), reopened.peek(10).map { it.eventId })
+        assertEquals(3, queueFile().readLines().size)
     }
 
     @Test
