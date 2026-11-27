@@ -38,6 +38,8 @@ class FavoritesViewModel(
 
     private var loadJob: Job? = null
 
+    private var lastLoadedAt = 0L
+
     init {
         viewModelScope.launch {
             online.collect { isOnline ->
@@ -54,6 +56,14 @@ class FavoritesViewModel(
     }
 
     fun load() {
+        val current = _state.value
+        if (current is FavoritesUiState.Content) {
+            if (current.error == null) {
+                if (System.currentTimeMillis() - lastLoadedAt < 60_000) {
+                    return
+                }
+            }
+        }
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             val today = mutableListOf<DailyMenu>()
@@ -83,6 +93,7 @@ class FavoritesViewModel(
                 rows.add(FavoriteRow(favorite, found))
             }
             _state.value = FavoritesUiState.Content(rows, error)
+            lastLoadedAt = System.currentTimeMillis()
         }
     }
 
