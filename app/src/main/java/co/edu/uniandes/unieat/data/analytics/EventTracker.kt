@@ -16,6 +16,8 @@ enum class EventKind(val wireName: String) {
     ARRIVAL("arrival"),
     LOCATION_OPEN("location_open"),
     FAVORITE("favorite"),
+    /** Same wire name as the iOS saved-menus feature. */
+    MENU_SAVE("menu_save"),
 }
 
 interface EventTracker {

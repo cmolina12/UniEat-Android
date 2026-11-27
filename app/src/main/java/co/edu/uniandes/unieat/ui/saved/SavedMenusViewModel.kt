@@ -8,6 +8,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.DailyMenu
+import co.edu.uniandes.unieat.data.analytics.EventKind
+import co.edu.uniandes.unieat.data.analytics.EventTracker
+import co.edu.uniandes.unieat.data.analytics.track
 import co.edu.uniandes.unieat.data.saved.BookmarkedMenu
 import co.edu.uniandes.unieat.data.saved.SavedMenus
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +36,7 @@ data class SavedMenusUiState(
 class SavedMenusViewModel(
     private val saved: SavedMenus,
     online: Flow<Boolean>,
+    private val events: EventTracker? = null,
 ) : ViewModel() {
     val state: StateFlow<SavedMenusUiState> = combine(saved.all(), online) { menus, isOnline ->
         SavedMenusUiState(loading = false, menus = menus, offline = !isOnline)
@@ -41,7 +45,10 @@ class SavedMenusViewModel(
     fun isSaved(menuId: String): Flow<Boolean> = saved.isSaved(menuId)
 
     fun toggle(menu: DailyMenu) {
-        viewModelScope.launch { saved.toggle(menu) }
+        viewModelScope.launch {
+            // Same event as the iOS saved menus: only when the menu is added, not when it is removed.
+            if (saved.toggle(menu)) events?.track(EventKind.MENU_SAVE, menu, SCREEN)
+        }
     }
 
     fun remove(menuId: String) {
@@ -54,10 +61,12 @@ class SavedMenusViewModel(
     }
 
     companion object {
+        private const val SCREEN = "detail"
+
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                SavedMenusViewModel(app.container.savedMenus, app.container.connectivity.online)
+                SavedMenusViewModel(app.container.savedMenus, app.container.connectivity.online, app.container.eventTracker)
             }
         }
     }
