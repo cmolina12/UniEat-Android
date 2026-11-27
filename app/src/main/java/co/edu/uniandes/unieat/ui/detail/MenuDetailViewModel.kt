@@ -23,8 +23,8 @@ import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.cache.MenuDetailCache
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurant
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
+import co.edu.uniandes.unieat.data.local.Favorite
+import co.edu.uniandes.unieat.data.local.Favorites
 import co.edu.uniandes.unieat.data.local.ReportQueue
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
@@ -137,7 +137,7 @@ class MenuDetailViewModel(
     private val reportQueue: ReportQueue? = null,
     /** Recently opened details (LruCache), a menu opened again shows at once. */
     private val memoryCache: MenuDetailCache? = null,
-    private val favorites: FavoriteRestaurants? = null,
+    private val favorites: Favorites? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -363,7 +363,7 @@ class MenuDetailViewModel(
             favorites.remove(menu.establishmentId)
             return false
         }
-        favorites.add(FavoriteRestaurant(menu.establishmentId, menu.establishmentName, menu.area))
+        favorites.add(Favorite(menu.establishmentId, menu.establishmentName, menu.area))
         eventTracker.track(EventKind.FAVORITE, menu, SCREEN)
         return true
     }

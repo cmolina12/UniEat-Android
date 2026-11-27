@@ -55,14 +55,14 @@ fun FavoritesScreen(
                 CircularProgressIndicator(color = Palette.Ink)
             }
             is FavoritesUiState.Content -> {
-                current.menusError?.let { DemoNotice("No pudimos cargar los menús de hoy · $it") }
+                current.error?.let { DemoNotice("No pudimos cargar los menús de hoy · $it") }
                 if (current.rows.isEmpty()) {
                     Text(
                         "Aún no tienes restaurantes favoritos. Toca el corazón en el detalle de un menú para guardarlo aquí.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                current.rows.forEach { row -> FavoriteCard(row, current.menusError != null, onOpenMenu) }
+                current.rows.forEach { row -> FavoriteCard(row, current.error != null, onOpenMenu) }
             }
         }
     }
@@ -70,7 +70,7 @@ fun FavoritesScreen(
 
 @Composable
 private fun FavoriteCard(row: FavoriteRow, menusUnknown: Boolean, onOpenMenu: (String) -> Unit) {
-    val menu = row.todayMenu
+    val menu = row.menu
     SurfaceCard(
         Modifier
             .fillMaxWidth()
