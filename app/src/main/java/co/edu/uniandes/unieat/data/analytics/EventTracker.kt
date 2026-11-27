@@ -15,6 +15,7 @@ enum class EventKind(val wireName: String) {
     SELECTION("selection"),
     ARRIVAL("arrival"),
     LOCATION_OPEN("location_open"),
+    FAVORITE("favorite"),
 }
 
 interface EventTracker {

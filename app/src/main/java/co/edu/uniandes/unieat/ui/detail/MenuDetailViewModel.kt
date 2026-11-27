@@ -23,6 +23,8 @@ import co.edu.uniandes.unieat.data.analytics.EventKind
 import co.edu.uniandes.unieat.data.cache.MenuDetailCache
 import co.edu.uniandes.unieat.data.analytics.EventTracker
 import co.edu.uniandes.unieat.data.analytics.track
+import co.edu.uniandes.unieat.data.local.FavoriteRestaurant
+import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
 import co.edu.uniandes.unieat.data.local.ReportQueue
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.location.UserLocation
@@ -135,6 +137,7 @@ class MenuDetailViewModel(
     private val reportQueue: ReportQueue? = null,
     /** Recently opened details (LruCache), a menu opened again shows at once. */
     private val memoryCache: MenuDetailCache? = null,
+    private val favorites: FavoriteRestaurants? = null,
     private val deviceClock: () -> Instant = Instant::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow<MenuDetailUiState>(MenuDetailUiState.Loading)
@@ -169,6 +172,13 @@ class MenuDetailViewModel(
     /** Reports of this menu waiting for signal. Room's Flow updates it when the worker sends them. */
     val queuedReports: StateFlow<Int> = (reportQueue?.pendingFor(menuId) ?: flowOf(0))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isFavorite: StateFlow<Boolean?> = _state
+        .map { (it as? MenuDetailUiState.Content)?.menu?.establishmentId }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> if (id == null || favorites == null) flowOf(null) else favorites.isFavorite(id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private var openTracked = false
 
@@ -349,6 +359,20 @@ class MenuDetailViewModel(
         _selected.value = true
     }
 
+    fun toggleFavorite() {
+        val menu = (_state.value as? MenuDetailUiState.Content)?.menu ?: return
+        val store = favorites ?: return
+        val wasFavorite = isFavorite.value ?: return
+        viewModelScope.launch {
+            if (wasFavorite) {
+                store.delete(menu.establishmentId)
+            } else {
+                store.insert(FavoriteRestaurant(menu.establishmentId, menu.establishmentName, menu.area, deviceClock().toEpochMilli()))
+                eventTracker.track(EventKind.FAVORITE, menu, SCREEN)
+            }
+        }
+    }
+
     private fun distanceFlow(pinState: PinState, access: LocationAccess, enabled: Boolean): Flow<DistanceStatus> {
         if (pinState == PinState.NotLoaded || !access.checked) return flowOf(DistanceStatus.Idle)
         val pin = (pinState as? PinState.At)?.coordinate ?: return flowOf(DistanceStatus.NoRestaurantPin)
@@ -406,6 +430,7 @@ class MenuDetailViewModel(
                     online = app.container.connectivity.online,
                     reportQueue = app.container.reportQueue,
                     memoryCache = app.container.menuDetailCache,
+                    favorites = app.container.favorites,
                 )
             }
         }
