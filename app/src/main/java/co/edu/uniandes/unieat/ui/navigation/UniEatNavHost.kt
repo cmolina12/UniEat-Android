@@ -44,6 +44,7 @@ import co.edu.uniandes.unieat.ui.auth.ProfileScreen
 import co.edu.uniandes.unieat.ui.auth.ProfileViewModel
 import co.edu.uniandes.unieat.ui.detail.MenuDetailScreen
 import co.edu.uniandes.unieat.ui.detail.RecommendationNote
+import co.edu.uniandes.unieat.ui.favorites.FavoritesScreen
 import co.edu.uniandes.unieat.ui.feed.FeedScreen
 import co.edu.uniandes.unieat.ui.feed.RecommendScreen
 import co.edu.uniandes.unieat.ui.performance.PerformanceScreen
@@ -150,6 +151,9 @@ fun UniEatNavHost(container: AppContainer, navController: NavHostController = re
                     onSessionExpired = expireSession,
                 )
             }
+            composable<Favorites> { entry ->
+                FavoritesScreen(onOpenMenu = { navController.navigateFrom(entry, Detail(it)) })
+            }
             composable<Publish> {
                 val vm: PublishViewModel = viewModel(
                     factory = simpleFactory {
@@ -254,7 +258,7 @@ private fun <VM : ViewModel> simpleFactory(builder: () -> VM) = object : ViewMod
 
 /** Tabs by role, like iOS: restaurants get "Publicar" instead of "Elige por mí". The backend still checks access. */
 private fun Tab.allowedFor(role: String?, demo: Boolean): Boolean = when (this) {
-    Tab.RECOMMEND -> demo || role != "restaurant"
+    Tab.RECOMMEND, Tab.FAVORITES -> demo || role != "restaurant"
     Tab.PUBLISH -> demo || role == "restaurant"
     Tab.PERFORMANCE -> demo || role == "restaurant" || role == "admin"
     else -> true

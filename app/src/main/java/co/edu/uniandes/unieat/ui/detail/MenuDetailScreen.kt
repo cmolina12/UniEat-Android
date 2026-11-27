@@ -32,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,6 +99,7 @@ fun MenuDetailScreen(
     val report by viewModel.report.collectAsStateWithLifecycle()
     val queuedReports by viewModel.queuedReports.collectAsStateWithLifecycle()
     val selected by viewModel.selected.collectAsStateWithLifecycle()
+    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
     val openReport = { kind: ReportKind ->
         viewModel.onReportSheetOpened()
@@ -151,6 +155,8 @@ fun MenuDetailScreen(
         recommendation = recommendation,
         canFinishWait = canFinishWait,
         onFinishWait = { waitViewModel.finishMeasurement(context) },
+        isFavorite = isFavorite,
+        onToggleFavorite = viewModel::toggleFavorite,
     )
 
     val content = state as? MenuDetailUiState.Content
@@ -194,6 +200,8 @@ private fun MenuDetailContent(
     recommendation: RecommendationNote? = null,
     canFinishWait: Boolean = false,
     onFinishWait: () -> Unit = {},
+    isFavorite: Boolean? = null,
+    onToggleFavorite: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -207,6 +215,15 @@ private fun MenuDetailContent(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Palette.Ink)
             }
             Box(Modifier.weight(1f)) { BrandHeader("Detalle del plato") }
+            if (isFavorite != null) {
+                IconToggleButton(checked = isFavorite, onCheckedChange = { onToggleFavorite() }) {
+                    Icon(
+                        if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Quitar de favoritos" else "Guardar en favoritos",
+                        tint = Palette.Coral,
+                    )
+                }
+            }
         }
         if (isDemo) DemoNotice("Datos de prueba (seed.sql) · sin conexión al servidor")
 

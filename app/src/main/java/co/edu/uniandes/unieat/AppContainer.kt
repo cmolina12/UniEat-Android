@@ -20,6 +20,7 @@ import co.edu.uniandes.unieat.data.analytics.RemoteAnalyticsRepository
 import co.edu.uniandes.unieat.data.analytics.WorkManagerFlushScheduler
 import co.edu.uniandes.unieat.data.local.DataStorePerformancePreferences
 import co.edu.uniandes.unieat.data.local.DataStoreProfileCache
+import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
 import co.edu.uniandes.unieat.data.local.FileOfflineStore
 import co.edu.uniandes.unieat.data.local.FilePerformanceSnapshots
 import co.edu.uniandes.unieat.data.local.OfflineStore
@@ -129,6 +130,8 @@ class AppContainer(
     val waitRecords by lazy {
         Room.databaseBuilder(context.applicationContext, WaitHistoryDatabase::class.java, "wait_history.db").build().records()
     }
+
+    val favorites = FavoriteRestaurants()
 
     /** Offline copy of the feed. Not needed in demo mode. */
     val feedCache: FeedCache? by lazy {
@@ -255,6 +258,7 @@ class AppContainer(
                     arrivalCache.evictAll()
                     waitRecords.deleteAll()
                     clearSentReports(context)
+                    favorites.deleteAll()
                 }
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
