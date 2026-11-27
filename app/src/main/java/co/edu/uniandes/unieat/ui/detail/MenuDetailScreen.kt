@@ -89,6 +89,8 @@ fun MenuDetailScreen(
     recommendation: RecommendationNote? = null,
     onOpenMenu: (String) -> Unit,
     onSessionExpired: () -> Unit,
+    /** Only students report; the backend answers 403 to restaurants and admins. */
+    canReport: Boolean = true,
     viewModel: MenuDetailViewModel = viewModel(key = menuId, factory = MenuDetailViewModel.factory(menuId)),
     waitViewModel: WaitMeasurementViewModel = viewModel(factory = WaitMeasurementViewModel.factory()),
 ) {
@@ -144,11 +146,11 @@ fun MenuDetailScreen(
             onAllow = { permissionLauncher.launch(arrayOf(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION)) },
             onNotNow = viewModel::onLocationPromptDismissed,
             onArrivalAnswered = viewModel::onArrivalAnswered,
-            onReportLocation = { openReport(ReportKind.LOCATION) },
+            onReportLocation = { openReport(ReportKind.LOCATION) }.takeIf { canReport },
             onOpenMaps = viewModel::onOpenMaps,
-            onReportNotFound = { openReport(ReportKind.NOT_FOUND) },
+            onReportNotFound = { openReport(ReportKind.NOT_FOUND) }.takeIf { canReport },
         ),
-        onReport = { openReport(ReportKind.UNAVAILABLE) },
+        onReport = { openReport(ReportKind.UNAVAILABLE) }.takeIf { canReport },
         queuedReports = queuedReports,
         isDemo = viewModel.isDemo,
         fixtures = viewModel.fixtures,
@@ -194,7 +196,8 @@ private fun MenuDetailContent(
     distance: DistanceStatus,
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
-    onReport: () -> Unit,
+    /** null hides "Reportar un cambio" (accounts that can't report). */
+    onReport: (() -> Unit)?,
     queuedReports: Int,
     isDemo: Boolean,
     fixtures: List<DemoFixture>,
@@ -287,7 +290,8 @@ private fun MenuBody(
     arrival: ArrivalAnswer?,
     locationActions: LocationActions,
     onSelect: () -> Unit,
-    onReport: () -> Unit,
+    /** null hides "Reportar un cambio" (accounts that can't report). */
+    onReport: (() -> Unit)?,
     queuedReports: Int,
     selected: Boolean,
     canFinishWait: Boolean = false,
@@ -379,7 +383,7 @@ private fun MenuBody(
                 .padding(12.dp),
         )
     }
-    SolidButton("Reportar un cambio", onClick = onReport, icon = Icons.Filled.Warning, color = Palette.Coral)
+    onReport?.let { SolidButton("Reportar un cambio", onClick = it, icon = Icons.Filled.Warning, color = Palette.Coral) }
 }
 
 @Composable

@@ -98,23 +98,27 @@ fun LocationCard(
             guidance.entranceDescription?.let { ReferenceRow(Icons.Filled.Info, "Entrada: $it") }
                 ?: MissingReference(LocationReference.ENTRANCE)
 
-            Text(
-                "¿La ubicación o la entrada no coinciden? Repórtalo",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                textDecoration = TextDecoration.Underline,
-                color = Palette.Ink,
-                modifier = Modifier.clickable(onClick = actions.onReportLocation),
-            )
+            actions.onReportLocation?.let { report ->
+                Text(
+                    "¿La ubicación o la entrada no coinciden? Repórtalo",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = TextDecoration.Underline,
+                    color = Palette.Ink,
+                    modifier = Modifier.clickable(onClick = report),
+                )
+            }
 
-            Text(
-                "¿Fuiste y no encontraste el local? Avísanos",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                textDecoration = TextDecoration.Underline,
-                color = Palette.Ink,
-                modifier = Modifier.clickable(onClick = actions.onReportNotFound),
-            )
+            actions.onReportNotFound?.let { report ->
+                Text(
+                    "¿Fuiste y no encontraste el local? Avísanos",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = TextDecoration.Underline,
+                    color = Palette.Ink,
+                    modifier = Modifier.clickable(onClick = report),
+                )
+            }
 
             Text(
                 "Actualizado ${SpanishPresentation.relative(guidance.updatedAt, now)}",
