@@ -22,6 +22,8 @@ class EventQueue(
     private val maxAge: Duration = Duration.ofDays(7).minusHours(1),
     private val clock: () -> Instant = Instant::now,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Wraps the disk writes so they show in a system trace (Perfetto). Tests leave it as a plain call. */
+    private val trace: (String, () -> Unit) -> Unit = { _, block -> block() },
 ) {
     private val mutex = Mutex()
     private val serializer = ListSerializer(RemoteEvent.serializer())
@@ -61,7 +63,7 @@ class EventQueue(
         mutableListOf()
     }
 
-    private fun save(events: List<RemoteEvent>) {
+    private fun save(events: List<RemoteEvent>) = trace(TRACE_WRITE) {
         try {
             file.parentFile?.mkdirs()
             val tmp = File(file.path + ".tmp")
@@ -69,5 +71,9 @@ class EventQueue(
             Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: IOException) {
         }
+    }
+
+    companion object {
+        const val TRACE_WRITE = "EventQueue.write"
     }
 }
