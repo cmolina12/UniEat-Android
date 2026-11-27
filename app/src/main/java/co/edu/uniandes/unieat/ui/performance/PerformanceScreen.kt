@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,6 +60,7 @@ fun PerformanceScreen(
     role: String?,
     userId: String?,
     onSessionExpired: () -> Unit,
+    onOpenPublicationTiming: (() -> Unit)? = null,
     viewModel: PerformanceViewModel = viewModel(
         key = "performance:$userId:$role",
         factory = PerformanceViewModel.factory(role),
@@ -79,6 +81,7 @@ fun PerformanceScreen(
         isDemo = container.usesFakeData,
         onSelectDays = viewModel::selectDays,
         onRetry = viewModel::load,
+        onOpenPublicationTiming = onOpenPublicationTiming,
     )
 }
 
@@ -89,6 +92,7 @@ private fun PerformanceContent(
     isDemo: Boolean,
     onSelectDays: (Int) -> Unit,
     onRetry: () -> Unit,
+    onOpenPublicationTiming: (() -> Unit)? = null,
 ) {
     Column(
         Modifier
@@ -99,6 +103,9 @@ private fun PerformanceContent(
     ) {
         BrandHeader("Rendimiento")
         if (isDemo) DemoNotice("Datos de prueba (seed.sql) · sin conexión al servidor")
+        if (onOpenPublicationTiming != null) {
+            OutlinedButton(onClick = onOpenPublicationTiming) { Text("Cuándo publicar") }
+        }
 
         Text("Métricas del pipeline", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
         ChipRow(
