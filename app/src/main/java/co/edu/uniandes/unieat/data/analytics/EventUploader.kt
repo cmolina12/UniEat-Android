@@ -21,6 +21,9 @@ interface AnalyticsRepository {
 
     suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = null
 
+    /** Admin: GET /admin/dashboard, with BQ-05 and BQ-17 (Camilo) in one answer. */
+    suspend fun adminDashboard(days: Int): AdminDashboardResponse = AdminDashboardResponse(bq05 = locationGuidance(days))
+
     suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot? = null
 
     /** BQ-10: same endpoint for admins and restaurants; the backend decides what each one gets. */
@@ -37,8 +40,10 @@ class RemoteAnalyticsRepository(private val api: ApiClient) : AnalyticsRepositor
     override suspend fun restaurantPerformance(days: Int): PerformanceSummary =
         api.get("restaurant/performance", mapOf("days" to days, "platform" to ALL_PLATFORMS))
 
-    override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? =
-        api.get<AdminDashboardResponse>("admin/dashboard", mapOf("days" to days)).bq05
+    override suspend fun adminDashboard(days: Int): AdminDashboardResponse =
+        api.get("admin/dashboard", mapOf("days" to days))
+
+    override suspend fun locationGuidance(days: Int): LocationGuidanceSnapshot? = adminDashboard(days).bq05
 
     override suspend fun restaurantLocationGuidance(days: Int): LocationGuidanceSnapshot =
         api.get("restaurant/location-guidance", mapOf("days" to days))

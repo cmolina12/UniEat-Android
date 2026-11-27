@@ -1,6 +1,7 @@
 package co.edu.uniandes.unieat.data.local
 
 import co.edu.uniandes.unieat.core.model.InstantSerializer
+import co.edu.uniandes.unieat.core.model.ReportFollowUpSnapshot
 import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
@@ -31,6 +32,8 @@ data class SavedPerformance(
     val locationCompleteness: LocationCompletenessSnapshot? = null,
     /** BQ-13 (Samuel). Default null, so copies saved before this field existed still decode. */
     val cachePilot: CachePilotReport? = null,
+    /** BQ-17 (Camilo). Same default, older copies still decode. */
+    val reportFollowUp: ReportFollowUpSnapshot? = null,
 )
 
 interface PerformanceSnapshots {

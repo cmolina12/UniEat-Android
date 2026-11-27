@@ -178,8 +178,40 @@ data class LocationCompletenessSnapshot(
     val ownEstablishments: List<OwnCompleteness> = emptyList(),
 )
 
+/** BQ-17 (Camilo), one group of students who reported: those who opened Mis reportes, or those who did not. */
 @Serializable
-data class AdminDashboardResponse(val bq05: LocationGuidanceSnapshot? = null)
+data class ReportFollowUpGroup(
+    val students: Int = 0,
+    val reports: Int = 0,
+    /** students with more than one report in the period */
+    val repeatStudents: Int = 0,
+    /** repeatStudents / students, from the backend. null with no students. */
+    val repeatShare: Double? = null,
+    val reportsPerStudent: Double? = null,
+)
+
+@Serializable
+data class ReportFollowUpGroups(
+    val opened: ReportFollowUpGroup = ReportFollowUpGroup(),
+    val notOpened: ReportFollowUpGroup = ReportFollowUpGroup(),
+)
+
+/** BQ-17: do students who open Mis reportes report more? Part of GET /admin/dashboard. */
+@Serializable
+data class ReportFollowUpSnapshot(
+    val periodDays: Int,
+    val minimumSampleSize: Int = 5,
+    /** opens of Mis reportes in the period */
+    val opens: Int = 0,
+    val groups: ReportFollowUpGroups = ReportFollowUpGroups(),
+)
+
+@Serializable
+data class AdminDashboardResponse(
+    val bq05: LocationGuidanceSnapshot? = null,
+    /** null until the backend has BQ-17; the card then just doesn't show */
+    val bq17: ReportFollowUpSnapshot? = null,
+)
 
 @Serializable
 data class Profile(
