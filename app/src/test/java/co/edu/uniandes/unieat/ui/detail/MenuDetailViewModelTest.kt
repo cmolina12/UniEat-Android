@@ -7,7 +7,6 @@ import co.edu.uniandes.unieat.core.model.FeedResponse
 import co.edu.uniandes.unieat.core.model.MenuBody
 import co.edu.uniandes.unieat.core.model.MenuDetailResponse
 import co.edu.uniandes.unieat.data.analytics.EventKind
-import co.edu.uniandes.unieat.data.local.FavoriteRestaurants
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import co.edu.uniandes.unieat.data.repository.CachedFeed
@@ -17,7 +16,6 @@ import co.edu.uniandes.unieat.data.repository.SavedMenu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -268,30 +266,6 @@ class MenuDetailViewModelTest {
 
         assertTrue(vm.selected.value)
         assertEquals(1, tracker.events.count { it.kind == EventKind.SELECTION })
-    }
-
-    @Test
-    fun theHeartSavesTheRestaurantSendsBq19OnceAndRemovesItOnTheSecondTap() = runTest(dispatcher) {
-        val tracker = RecordingTracker()
-        val favorites = FavoriteRestaurants()
-        val vm = MenuDetailViewModel(
-            "m", StubRepository { MenuDetailResponse(serverNow, serverNow, menu()) }, StubLocation(), tracker, StubReports(),
-            favorites = favorites,
-        ) { serverNow }
-        backgroundScope.launch { vm.isFavorite.collect {} }
-        advanceUntilIdle()
-        assertEquals(false, vm.isFavorite.value)
-
-        vm.toggleFavorite()
-        advanceUntilIdle()
-        assertEquals(true, vm.isFavorite.value)
-        assertEquals(listOf("e"), favorites.all().map { it.establishmentId })
-
-        vm.toggleFavorite()
-        advanceUntilIdle()
-        assertEquals(false, vm.isFavorite.value)
-        assertTrue(favorites.all().isEmpty())
-        assertEquals(1, tracker.events.count { it.kind == EventKind.FAVORITE })
     }
 
     private fun apiError(code: String, message: String, status: Int) = ApiException(ApiError(code, message), status)

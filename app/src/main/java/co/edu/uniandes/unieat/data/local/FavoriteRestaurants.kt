@@ -1,30 +1,34 @@
 package co.edu.uniandes.unieat.data.local
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import android.content.Context
 
-data class FavoriteRestaurant(
-    val establishmentId: String,
-    val name: String,
-    val area: String,
-    val addedAt: Long,
-)
+data class FavoriteRestaurant(val establishmentId: String, val name: String, val area: String)
 
-class FavoriteRestaurants {
-    private val saved = MutableStateFlow<List<FavoriteRestaurant>>(emptyList())
+class FavoriteRestaurants(context: Context) {
+    private val prefs = context.getSharedPreferences("favorites", Context.MODE_PRIVATE)
 
-    suspend fun all(): List<FavoriteRestaurant> = saved.value.sortedByDescending { it.addedAt }
+    fun all(): List<FavoriteRestaurant> {
+        val list = mutableListOf<FavoriteRestaurant>()
+        for (id in prefs.all.keys) {
+            val parts = prefs.getString(id, "|").orEmpty().split("|")
+            list.add(FavoriteRestaurant(id, parts[0], parts[1]))
+        }
+        return list
+    }
 
-    fun isFavorite(establishmentId: String): Flow<Boolean> =
-        saved.map { list -> list.any { it.establishmentId == establishmentId } }
+    fun isFavorite(establishmentId: String): Boolean {
+        return prefs.contains(establishmentId)
+    }
 
-    suspend fun insert(favorite: FavoriteRestaurant) =
-        saved.update { list -> list.filterNot { it.establishmentId == favorite.establishmentId } + favorite }
+    fun add(favorite: FavoriteRestaurant) {
+        prefs.edit().putString(favorite.establishmentId, favorite.name + "|" + favorite.area).apply()
+    }
 
-    suspend fun delete(establishmentId: String) =
-        saved.update { list -> list.filterNot { it.establishmentId == establishmentId } }
+    fun remove(establishmentId: String) {
+        prefs.edit().remove(establishmentId).apply()
+    }
 
-    suspend fun deleteAll() = saved.update { emptyList() }
+    fun clear() {
+        prefs.edit().clear().apply()
+    }
 }

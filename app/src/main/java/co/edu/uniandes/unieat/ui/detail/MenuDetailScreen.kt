@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,7 +100,11 @@ fun MenuDetailScreen(
     val report by viewModel.report.collectAsStateWithLifecycle()
     val queuedReports by viewModel.queuedReports.collectAsStateWithLifecycle()
     val selected by viewModel.selected.collectAsStateWithLifecycle()
-    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
+    val menu = (state as? MenuDetailUiState.Content)?.menu
+    var isFavorite by remember { mutableStateOf(false) }
+    LaunchedEffect(menu) {
+        if (menu != null) isFavorite = viewModel.isFavorite(menu)
+    }
     var reportKind by rememberSaveable { mutableStateOf<ReportKind?>(null) }
     val openReport = { kind: ReportKind ->
         viewModel.onReportSheetOpened()
@@ -155,8 +160,9 @@ fun MenuDetailScreen(
         recommendation = recommendation,
         canFinishWait = canFinishWait,
         onFinishWait = { waitViewModel.finishMeasurement(context) },
+        showFavorite = menu != null,
         isFavorite = isFavorite,
-        onToggleFavorite = viewModel::toggleFavorite,
+        onToggleFavorite = { if (menu != null) isFavorite = viewModel.toggleFavorite(menu) },
     )
 
     val content = state as? MenuDetailUiState.Content
@@ -200,7 +206,8 @@ private fun MenuDetailContent(
     recommendation: RecommendationNote? = null,
     canFinishWait: Boolean = false,
     onFinishWait: () -> Unit = {},
-    isFavorite: Boolean? = null,
+    showFavorite: Boolean = false,
+    isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
 ) {
     Column(
@@ -215,7 +222,7 @@ private fun MenuDetailContent(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Palette.Ink)
             }
             Box(Modifier.weight(1f)) { BrandHeader("Detalle del plato") }
-            if (isFavorite != null) {
+            if (showFavorite) {
                 IconToggleButton(checked = isFavorite, onCheckedChange = { onToggleFavorite() }) {
                     Icon(
                         if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
