@@ -9,8 +9,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.MyReport
 import co.edu.uniandes.unieat.core.model.ReportedPlace
+import co.edu.uniandes.unieat.core.model.ReportedPlaceResponse
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
+import co.edu.uniandes.unieat.data.myreports.ReportedPlaceCache
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +43,7 @@ class ReportedPlaceViewModel(
     private val repository: MyReportsRepository,
     private val store: ReportHistoryStore? = null,
     online: Flow<Boolean>? = null,
+    private val cache: ReportedPlaceCache? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReportedPlaceUiState())
     val state: StateFlow<ReportedPlaceUiState> = _state.asStateFlow()
@@ -58,13 +61,23 @@ class ReportedPlaceViewModel(
         loadJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
         loadJob = viewModelScope.launch {
-            if (_state.value.reports.isEmpty()) {
+            // memory first (LRU), then the phone (Room), then the server
+            val cached = cache?.get(establishmentId)
+            if (cached != null) {
+                show(cached.response)
+                // opened less than a minute ago: nothing to ask
+                if (cache.isFresh(cached)) {
+                    _state.update { it.copy(loading = false) }
+                    return@launch
+                }
+            } else if (_state.value.reports.isEmpty()) {
                 store?.loadPlace(establishmentId)?.let { saved ->
                     _state.update { it.copy(place = saved.place, reports = saved.reports, savedAt = saved.savedAt) }
                 }
             }
             try {
                 val response = repository.place(establishmentId)
+                cache?.put(response)
                 _state.update {
                     it.copy(
                         loading = false, place = response.place, reports = response.reports, error = null,
@@ -84,6 +97,10 @@ class ReportedPlaceViewModel(
         }
     }
 
+    private fun show(response: ReportedPlaceResponse) {
+        _state.update { it.copy(place = response.place, reports = response.reports, savedAt = null, offline = false) }
+    }
+
     companion object {
         fun factory(establishmentId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -93,6 +110,7 @@ class ReportedPlaceViewModel(
                     app.container.myReportsRepository,
                     app.container.reportHistory,
                     app.container.connectivity.online,
+                    app.container.reportedPlaceCache,
                 )
             }
         }

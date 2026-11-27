@@ -10,6 +10,7 @@ import co.edu.uniandes.unieat.data.local.PendingReport
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStoreTest
+import co.edu.uniandes.unieat.data.myreports.ReportedPlaceCache
 import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
@@ -171,6 +172,36 @@ class MyReportsViewModelTest {
     }
 
     @Test
+    fun reopeningAPlaceWithinAMinuteUsesTheCacheAndSkipsTheRequest() = runTest(dispatcher) {
+        val cache = ReportedPlaceCache { now }
+        val repo = Repo(places = listOf(place("a", total = 1)))
+        ReportedPlaceViewModel("a", repo, cache = cache)
+        advanceUntilIdle()
+
+        val again = ReportedPlaceViewModel("a", repo, cache = cache)
+        advanceUntilIdle()
+
+        assertEquals(listOf("r-a"), again.state.value.reports.map { it.id })
+        assertFalse(again.state.value.loading)
+        assertEquals(1, repo.placeCalls)
+    }
+
+    @Test
+    fun anOlderEntryIsShownAtOnceAndRefreshed() = runTest(dispatcher) {
+        var clock = now
+        val cache = ReportedPlaceCache { clock }
+        val repo = Repo(places = listOf(place("a", total = 1)))
+        ReportedPlaceViewModel("a", repo, cache = cache)
+        advanceUntilIdle()
+
+        clock = now.plusSeconds(120)
+        ReportedPlaceViewModel("a", repo, cache = cache)
+        advanceUntilIdle()
+
+        assertEquals(2, repo.placeCalls)
+    }
+
+    @Test
     fun theDetailListsTheReportsOfOnePlace() = runTest(dispatcher) {
         val vm = ReportedPlaceViewModel("a", Repo(places = listOf(place("a", total = 1))))
         advanceUntilIdle()
@@ -204,6 +235,7 @@ class MyReportsViewModelTest {
         var error: String? = null,
     ) : MyReportsRepository {
         var calls = 0
+        var placeCalls = 0
 
         override suspend fun places(): ReportedPlacesResponse {
             calls++
@@ -212,6 +244,7 @@ class MyReportsViewModelTest {
         }
 
         override suspend fun place(establishmentId: String): ReportedPlaceResponse {
+            placeCalls++
             error?.let { throw ApiException(ApiError(it, "falló")) }
             val place = places.first { it.establishmentId == establishmentId }
             return ReportedPlaceResponse(now, place, listOf(report("price").copy(id = "r-$establishmentId")))
