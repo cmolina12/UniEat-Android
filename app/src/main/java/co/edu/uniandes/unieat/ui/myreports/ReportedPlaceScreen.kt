@@ -54,6 +54,7 @@ fun ReportedPlaceScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { ScreenHeader(place?.name ?: name, onBack, subtitle = place?.area ?: area) }
+        state.savedAt?.let { item { SavedNotice(it, state.loading) } }
         if (place != null) {
             item {
                 Text(

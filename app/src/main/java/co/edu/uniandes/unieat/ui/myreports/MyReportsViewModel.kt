@@ -10,6 +10,7 @@ import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportFilter
 import co.edu.uniandes.unieat.core.model.ReportedPlace
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
+import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,8 @@ data class MyReportsUiState(
     val serverNow: Instant? = null,
     val error: String? = null,
     val sessionExpired: Boolean = false,
+    /** set while the rows come from the phone (Room) instead of a fresh answer */
+    val savedAt: Instant? = null,
 ) {
     val visible: List<ReportedPlace> get() = places.filter(filter::matches)
     val totalReports: Int get() = places.sumOf { it.total }
@@ -39,6 +42,7 @@ data class MyReportsUiState(
 /** Camilo, Sprint 4. Mis reportes: the places where the student reported and what happened to each report. */
 class MyReportsViewModel(
     private val repository: MyReportsRepository,
+    private val store: ReportHistoryStore? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MyReportsUiState())
     val state: StateFlow<MyReportsUiState> = _state.asStateFlow()
@@ -53,11 +57,16 @@ class MyReportsViewModel(
         loadJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
         loadJob = viewModelScope.launch {
+            // the phone's copy first, so the list is there while the request runs
+            if (_state.value.places.isEmpty()) showSaved()
             try {
                 val response = repository.places()
                 _state.update {
-                    it.copy(loading = false, places = response.places, serverNow = response.serverNow, error = null)
+                    it.copy(
+                        loading = false, places = response.places, serverNow = response.serverNow, error = null, savedAt = null,
+                    )
                 }
+                store?.savePlaces(response.places)
             } catch (e: ApiException) {
                 _state.update {
                     if (e.code == ApiException.AUTH_REQUIRED) it.copy(loading = false, sessionExpired = true)
@@ -65,6 +74,11 @@ class MyReportsViewModel(
                 }
             }
         }
+    }
+
+    private suspend fun showSaved() {
+        val saved = store?.loadPlaces() ?: return
+        _state.update { it.copy(places = saved.places, savedAt = saved.savedAt) }
     }
 
     fun selectFilter(filter: ReportFilter) {
@@ -75,7 +89,7 @@ class MyReportsViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                MyReportsViewModel(app.container.myReportsRepository)
+                MyReportsViewModel(app.container.myReportsRepository, app.container.reportHistory)
             }
         }
     }

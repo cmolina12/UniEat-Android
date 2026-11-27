@@ -63,6 +63,7 @@ import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.myreports.EmptyMyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.RemoteMyReportsRepository
+import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.repository.FeedCache
@@ -205,6 +206,9 @@ class AppContainer(
         if (usesFakeData) EmptyMyReportsRepository else RemoteMyReportsRepository(apiClient)
     }
 
+    /** Room copy of Mis reportes, so the view opens without signal. */
+    val reportHistory: ReportHistoryStore by lazy { ReportHistoryStore(database.reportHistory()) }
+
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
 
     /** Sprint 4 (Samuel): menus the student saved, in Room. Local only, so it works with or without signal. */
@@ -298,6 +302,8 @@ class AppContainer(
                 if (!usesFakeData) cachePilot.clear()
                 // Saved menus belong to the account too. Demo mode keeps them for the same reason as the pilot.
                 if (!usesFakeData) savedMenus.clear()
+                // Mis reportes: one student's history can't show up for the next account
+                reportHistory.clear()
             }
         }
     }
