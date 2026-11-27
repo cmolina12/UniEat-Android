@@ -89,6 +89,13 @@ class FeedLoadTelemetry(
     private val file = File(appContext.filesDir, "analytics/feed-load-telemetry.json")
     private val mutex = Mutex()
 
+    /**
+     * Records as last read or written, so the file is decoded once per process instead of once per
+     * operation (append, render, upload check, mark as sent). Only this class writes the file and every
+     * access holds [mutex], so the copy in memory cannot drift from the disk. Never mutated in place.
+     */
+    private var cache: List<FeedLoadRecord>? = null
+
     suspend fun start(): FeedLoadAttempt = FeedLoadAttempt(UUID.randomUUID().toString(), clock().toEpochMilli())
 
     suspend fun success(attempt: FeedLoadAttempt) = append(
@@ -162,12 +169,16 @@ class FeedLoadTelemetry(
         writeUnsafe(records)
     } }
 
-    private fun readUnsafe(): List<FeedLoadRecord> = try {
+    private fun readUnsafe(): List<FeedLoadRecord> = cache ?: readFile().also { cache = it }
+
+    private fun readFile(): List<FeedLoadRecord> = try {
         if (!file.exists()) emptyList() else UniEatJson.decodeFromString<List<FeedLoadRecord>>(file.readText())
     } catch (_: Exception) { emptyList() }
 
     private fun writeUnsafe(records: List<FeedLoadRecord>) {
         file.parentFile?.mkdirs(); file.writeText(UniEatJson.encodeToString(records))
+        // After the write: if it throws, the cache keeps matching what is on disk.
+        cache = records
     }
 
     /** Same labels as BQ-13, so both questions group loads by the same connection types. */

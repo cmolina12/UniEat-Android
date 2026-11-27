@@ -46,11 +46,18 @@ import co.edu.uniandes.unieat.data.pilot.LocalCachePilotRepository
 import co.edu.uniandes.unieat.data.pilot.PilotEventTracker
 import co.edu.uniandes.unieat.data.pilot.RemoteCachePilotRepository
 import co.edu.uniandes.unieat.data.pilot.WorkManagerCachePilotScheduler
+import co.edu.uniandes.unieat.data.saved.SavedMenus
+import co.edu.uniandes.unieat.data.telemetry.CrashRepository
+import co.edu.uniandes.unieat.data.telemetry.CrashTelemetry
+import co.edu.uniandes.unieat.data.telemetry.CrashUploader
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadRepository
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadTelemetry
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadUploader
+import co.edu.uniandes.unieat.data.telemetry.LocalCrashRepository
 import co.edu.uniandes.unieat.data.telemetry.LocalFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.RemoteCrashRepository
 import co.edu.uniandes.unieat.data.telemetry.RemoteFeedLoadRepository
+import co.edu.uniandes.unieat.data.telemetry.WorkManagerCrashScheduler
 import co.edu.uniandes.unieat.data.telemetry.WorkManagerFeedLoadScheduler
 import co.edu.uniandes.unieat.data.location.LocationRepository
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
@@ -152,6 +159,19 @@ class AppContainer(
 
     val feedLoadUploader: FeedLoadUploader by lazy { FeedLoadUploader(feedLoadTelemetry, feedLoadRepository) }
 
+    // BQ-02 (Samuel): CrashTelemetry (disk, written by the uncaught-exception handler) → WorkManager →
+    // CrashUploader → POST /telemetry/crashes. Same layers as BQ-01.
+    val crashTelemetry: CrashTelemetry by lazy { CrashTelemetry(context, onCrash = { crashScheduler.schedule() }) }
+
+    val crashScheduler: FlushScheduler by lazy { WorkManagerCrashScheduler(context) }
+
+    val crashRepository: CrashRepository by lazy {
+        val local = LocalCrashRepository(crashTelemetry)
+        if (usesFakeData) local else RemoteCrashRepository(apiClient, local)
+    }
+
+    val crashUploader: CrashUploader by lazy { CrashUploader(crashTelemetry, crashRepository) }
+
     /** Feed filters shared by "Hoy" and "Elige por mí": both ViewModels observe this same flow. */
     val feedFilters = MutableStateFlow(FeedFilters())
 
@@ -179,6 +199,9 @@ class AppContainer(
 
     val reportQueue: ReportQueue by lazy { ReportQueue(database.pendingReports(), reportRepository, reportScheduler) }
 
+    /** Sprint 4 (Samuel): menus the student saved, in Room. Local only, so it works with or without signal. */
+    val savedMenus: SavedMenus by lazy { SavedMenus(database.bookmarkedMenus()) }
+
     val analyticsRepository: AnalyticsRepository by lazy {
         (if (usesFakeData) DevDataSource.analyticsRepository() else null) ?: RemoteAnalyticsRepository(apiClient)
     }
@@ -198,6 +221,8 @@ class AppContainer(
         PilotEventTracker(queued) { kind ->
             val at = System.currentTimeMillis()
             appScope.launch { cachePilot.onInteraction(kind, at) }
+            // BQ-02: the last tracked event is the "preceding action" of a crash.
+            crashTelemetry.onAction(kind.wireName)
         }
     }
 
@@ -263,6 +288,8 @@ class AppContainer(
                 // BQ-13: the pilot consent and its visits belong to the account that signed out. Demo mode
                 // is always "signed out", so clearing there would wipe the demo pilot on every launch.
                 if (!usesFakeData) cachePilot.clear()
+                // Saved menus belong to the account too. Demo mode keeps them for the same reason as the pilot.
+                if (!usesFakeData) savedMenus.clear()
             }
         }
     }

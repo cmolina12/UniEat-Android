@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.BuildConfig
 import co.edu.uniandes.unieat.core.model.CompletenessGroup
 import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
@@ -36,6 +38,7 @@ import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.pilot.CachePilotGroup
 import co.edu.uniandes.unieat.data.pilot.CachePilotReport
 import co.edu.uniandes.unieat.data.pilot.PilotVariant
+import co.edu.uniandes.unieat.data.telemetry.CrashReport
 import co.edu.uniandes.unieat.data.telemetry.FeedLoadReport
 import co.edu.uniandes.unieat.data.telemetry.SCOPE_THIS_DEVICE
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
@@ -133,6 +136,8 @@ private fun PerformanceContent(
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
                 state.cachePilot?.let { CachePilotBqCard(it) }
                 state.lineCongestion?.let { LineCongestionBqCard(it) }
+                // BQ-02 is admin only (all devices); the card is null for other roles
+                state.crashReport?.let { CrashBqCard(it) }
             }
         }
     }
@@ -171,6 +176,40 @@ private fun SummaryCards(summary: PerformanceSummary, ownEstablishmentsOnly: Boo
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Samuel — BQ-02: crashes per 1,000 sessions, ranked by screen and the action before the crash. */
+@Composable
+private fun CrashBqCard(report: CrashReport) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-02 · Fallos por pantalla y acción", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        // Only in debug builds: closes the app on purpose so the record can be shown in the demo.
+        if (BuildConfig.DEBUG) {
+            TextButton(onClick = { error("BQ-02: fallo de prueba") }) { Text("Simular fallo (solo debug)", color = Palette.Ink) }
+        }
+        if (report.crashes == 0) {
+            Text("Sin fallos registrados en los últimos ${report.periodDays} días · ${report.sessions} sesiones.")
+            return@SurfaceCard
+        }
+        val scope = if (report.scope == SCOPE_THIS_DEVICE) {
+            "Solo este dispositivo (el servidor no respondió)"
+        } else {
+            "Todos los dispositivos"
+        }
+        Text("$scope · últimos ${report.periodDays} días", style = MaterialTheme.typography.bodySmall)
+        Text("${report.crashes} fallos en ${report.sessions} sesiones · tasa por cada 1.000 sesiones que visitaron la pantalla.")
+        report.groups.take(5).forEach { group ->
+            Text(
+                "${group.screen} tras ${group.precedingAction} · ${group.deviceModel} · ${group.osVersion} · " +
+                    "v${group.appVersion} — %.1f por 1.000 (${group.crashes} de ${group.sessionsVisitingScreen} sesiones)"
+                        .format(group.crashesPer1000Sessions),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (report.groups.size > 5) {
+            Text("Se muestran los 5 puntos con mayor tasa.", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

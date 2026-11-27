@@ -68,6 +68,7 @@ import co.edu.uniandes.unieat.core.model.MenuDish
 import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.common.rememberServerNow
+import co.edu.uniandes.unieat.ui.saved.SaveMenuButton
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
 import co.edu.uniandes.unieat.ui.theme.FoodArtwork
@@ -246,6 +247,7 @@ private fun MenuDetailContent(
                     )
                 }
                 recommendation?.let { RecommendationCard(it) }
+                SaveMenuButton(state.menu)
                 MenuBody(
                     state.menu, state.location, rememberServerNow(state.clockOffset), distance, arrival, locationActions, onSelect, onReport,
                     queuedReports, selected, canFinishWait, onFinishWait,
