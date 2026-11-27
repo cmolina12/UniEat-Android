@@ -12,7 +12,7 @@ My slice for the last sprint: one micro-optimization measured with a profiler, t
 | "Menor fila" recommendation criterion | 2 | `ui/feed/RecommendationStrategy.kt` |
 | BQ-01 feed-load telemetry, upload and admin card | 2 | `data/telemetry/` |
 | BQ-13 cache pilot, 24 h TTL for the saved feed, login aware of connectivity | 3 | `data/pilot/`, `data/repository/FeedCachePolicy.kt`, `ui/auth/` |
-| **"Guardados" view: save a menu for later, list it offline, remove it** | **4** | `data/saved/`, `ui/saved/` |
+| **"Menús guardados" view: save a menu, list it offline, remove it (Android counterpart of the iOS saved menus)** | **4** | `data/saved/`, `ui/saved/` |
 | **BQ-02 crash telemetry, upload and admin card** | **4** | `data/telemetry/CrashTelemetry.kt`, `CrashUpload.kt`, `ui/performance/PerformanceScreen.kt` |
 | **Micro-optimization: BQ-01 records decoded once per process; saved-feed lookup stops at the newest match** | **4** | `data/telemetry/FeedLoadTelemetry.kt`, `data/repository/FeedCache.kt` |
 
@@ -24,22 +24,22 @@ My slice for the last sprint: one micro-optimization measured with a profiler, t
 - for the menu the student picks: location with pin, entrance, walking distance and reports of changes (Camilo);
 - an estimated wait per menu (BQ-06) and a recommendation with its reason;
 - it keeps working with poor or no signal: the last feed is shown with its saved time, reports and telemetry wait in a queue and are sent later;
-- **Sprint 4:** the student can keep the menus they are considering ("Guardados") and open the list without signal, so deciding does not depend on the connection at the moment of choosing.
+- **Sprint 4:** the student can keep the menus they are considering ("Menús guardados") and open the list without signal, so deciding does not depend on the connection at the moment of choosing.
 
 What is *not* delivered, so the proposition is not overstated: menus come only from establishments that publish them, and wait times are estimates from reports, not measurements.
 
 ## 3. New view and business question (viva voce)
 
-### 3.1 View: "Guardados" (feature: local storage)
+### 3.1 View: "Menús guardados" (feature: local storage)
 
-Reached from **Perfil → Ver mis guardados**; saved from the **detail** with "Guardar para después" (toggle). Each row shows establishment, title, lowest price, area, "Hasta HH:MM" or "Posiblemente vencido", and when it was saved. Tapping opens the detail (which uses the saved feed copy if there is no signal).
+Reached from **Perfil → Ver mis menús guardados**; saved from the **detail** with "Guardar este menú" (toggle). It is the Android counterpart of the iOS saved menus (Kevin, Sprint 2) and sends the same `menu_save` event. It does not replace Juan José's Favoritos: the heart in the detail saves the *restaurant*, this button saves *today's menu*. Each row shows establishment, title, lowest price, area, "Hasta HH:MM" or "Posiblemente vencido", and when it was saved. Tapping opens the detail (which uses the saved feed copy if there is no signal).
 
 ### 3.2 Business question: BQ-02 — Crashes by Screen and Action
 
 | Field | Value |
 |---|---|
 | **Question** (Sprint 1 §6.1, unchanged) | Over the last seven days, which screens and preceding actions had the highest crash rates per 1,000 sessions visiting those screens, segmented by device model, OS version, and app version? |
-| **Author** | Samuel David Rozen Mogollon (refines his Type 1 question from MS4) |
+| **Author** | Sprint 1 proposal (additional question extending the telemetry concerns of MS4); implemented by Samuel David Rozen Mogollon |
 | **Type** | **Type 1, app telemetry** |
 | **Rationale** | BQ-01 tells us where the feed is slow; BQ-02 tells us where the app *stops*. A crash on the detail after "selection" costs the one decision the app exists for. A rate per 1,000 sessions *that visited the screen* (not per crash) stops a popular screen from looking worse only because more people use it. |
 
@@ -97,7 +97,7 @@ Screenshots of both traces go next to the table. The numbers are not filled in h
 
 | Scenario | Strategy | Behavior |
 |---|---|---|
-| Save / remove a menu, open "Guardados" without signal | Local only | Everything is in Room; no request exists, so there is nothing to queue. The list shows a notice "Sin conexión · tu lista está en el teléfono". |
+| Save / remove a menu, open "Menús guardados" without signal | Local only | Everything is in Room; no request exists, so there is nothing to queue. The list shows a notice "Sin conexión · tu lista está en el teléfono". |
 | Open a saved menu without signal | Cache then network, falling back to cache | The detail uses the saved feed copy (`FileFeedCache.findMenu`) and says when it was saved. |
 | A crash happens (with or without signal) | Queue and retry | Written synchronously to disk; `WorkManagerCrashScheduler` uploads when there is network, with exponential backoff (30 s); the server ignores repeated ids. |
 | BQ-02 card, server unreachable or endpoint not deployed | Network falling back to local data | `RemoteCrashRepository.summary` answers with this device's crashes and the card says "Solo este dispositivo". |

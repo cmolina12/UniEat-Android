@@ -73,7 +73,7 @@ fun SavedMenusScreen(
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Palette.Ink)
                 }
-                Box(Modifier.weight(1f)) { BrandHeader("Guardados") }
+                Box(Modifier.weight(1f)) { BrandHeader("Menús guardados") }
             }
         }
         if (state.offline) {
@@ -92,9 +92,9 @@ fun SavedMenusScreen(
             }
             state.menus.isEmpty() -> item {
                 SurfaceCard(Modifier.fillMaxWidth()) {
-                    Text("Aún no has guardado menús", style = MaterialTheme.typography.titleMedium)
+                    Text("Aún no has guardado ningún menú", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Abre un menú y toca \"Guardar para después\" para encontrarlo aquí, también sin señal.",
+                        "Abre un menú y toca \"Guardar este menú\" para encontrarlo aquí, también sin señal.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -150,7 +150,7 @@ fun SaveMenuButton(
 ) {
     val saved by remember(menu.id) { vm.isSaved(menu.id) }.collectAsStateWithLifecycle(initialValue = false)
     SolidButton(
-        title = if (saved) "Guardado · toca para quitar" else "Guardar para después",
+        title = if (saved) "Menú guardado · toca para quitar" else "Guardar este menú",
         onClick = { vm.toggle(menu) },
         icon = if (saved) Icons.Filled.Check else Icons.Filled.Star,
         color = if (saved) Palette.Green else Palette.Paper,
@@ -162,12 +162,12 @@ fun SaveMenuButton(
 fun SavedMenusEntry(onOpen: () -> Unit) {
     SurfaceCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Guardados", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+            Text("Menús guardados", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
             Text(
                 "Los menús que guardas se quedan en tu teléfono y puedes ver la lista sin señal.",
                 fontSize = 14.sp,
             )
-            SolidButton("Ver mis guardados", onClick = onOpen, color = Palette.Yellow)
+            SolidButton("Ver mis menús guardados", onClick = onOpen, color = Palette.Yellow)
         }
     }
 }
