@@ -64,6 +64,7 @@ import co.edu.uniandes.unieat.data.myreports.EmptyMyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.RemoteMyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
+import co.edu.uniandes.unieat.data.myreports.ReportedPlaceCache
 import co.edu.uniandes.unieat.data.remote.AccessTokenProvider
 import co.edu.uniandes.unieat.data.remote.ApiClient
 import co.edu.uniandes.unieat.data.repository.FeedCache
@@ -206,6 +207,9 @@ class AppContainer(
         if (usesFakeData) EmptyMyReportsRepository else RemoteMyReportsRepository(apiClient)
     }
 
+    /** Places of Mis reportes already opened, in memory (LruCache, 10). */
+    val reportedPlaceCache = ReportedPlaceCache()
+
     /** Room copy of Mis reportes, so the view opens without signal. */
     val reportHistory: ReportHistoryStore by lazy { ReportHistoryStore(database.reportHistory()) }
 
@@ -304,6 +308,7 @@ class AppContainer(
                 if (!usesFakeData) savedMenus.clear()
                 // Mis reportes: one student's history can't show up for the next account
                 reportHistory.clear()
+                reportedPlaceCache.clear()
             }
         }
     }
