@@ -35,6 +35,8 @@ import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
 import co.edu.uniandes.unieat.core.model.LocationSignals
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
+import co.edu.uniandes.unieat.core.model.ReportFollowUpGroup
+import co.edu.uniandes.unieat.core.model.ReportFollowUpSnapshot
 import co.edu.uniandes.unieat.data.pilot.CachePilotGroup
 import co.edu.uniandes.unieat.data.pilot.CachePilotReport
 import co.edu.uniandes.unieat.data.pilot.PilotVariant
@@ -134,6 +136,7 @@ private fun PerformanceContent(
                 if (!state.ownEstablishmentsOnly) FeedLoadingBqCard(state.feedLoadReport)
                 state.locationGuidance?.let { LocationGuidanceBqCard(it, state.ownEstablishmentsOnly) }
                 state.locationCompleteness?.let { LocationCompletenessBqCard(it) }
+                state.reportFollowUp?.let { ReportFollowUpBqCard(it) }
                 state.cachePilot?.let { CachePilotBqCard(it) }
                 state.lineCongestion?.let { LineCongestionBqCard(it) }
                 // BQ-02 is admin only (all devices); the card is null for other roles
@@ -329,6 +332,38 @@ private fun LocationCompletenessBqCard(snapshot: LocationCompletenessSnapshot) {
 }
 
 private const val BQ10_LABEL_WEIGHT = 1.4f
+
+/** BQ-17 (Camilo): students who reported, split by whether they opened Mis reportes. The backend counts. */
+@Composable
+private fun ReportFollowUpBqCard(snapshot: ReportFollowUpSnapshot) {
+    val opened = snapshot.groups.opened
+    val notOpened = snapshot.groups.notOpened
+    val rows: List<Pair<String, (ReportFollowUpGroup) -> String>> = listOf(
+        "Estudiantes que reportaron" to { "${it.students}" },
+        "Reportes" to { "${it.reports}" },
+        "Reportaron más de una vez" to { group ->
+            group.repeatShare?.let { "${group.repeatStudents} · ${(it * 100).roundToInt()} %" } ?: "—"
+        },
+        "Reportes por estudiante" to { group -> group.reportsPerStudent?.let { "%.1f".format(it) } ?: "—" },
+    )
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Text("BQ-17 · ¿Quién abre Mis reportes reporta más?", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        Text(
+            "Estudiantes con al menos un reporte · todas las plataformas · últimos ${snapshot.periodDays} días",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TableRow(listOf("", "Abrieron", "No abrieron"), header = true, labelWeight = BQ10_LABEL_WEIGHT)
+        rows.forEach { (label, pick) -> TableRow(listOf(label, pick(opened), pick(notOpened)), labelWeight = BQ10_LABEL_WEIGHT) }
+        val small = opened.students < snapshot.minimumSampleSize || notOpened.students < snapshot.minimumSampleSize
+        Text(
+            "${snapshot.opens} aperturas de Mis reportes en el período. " +
+                (if (small) "Aún hay menos de ${snapshot.minimumSampleSize} estudiantes en un grupo: no se lee como respuesta. " else "") +
+                "Es una comparación observacional: muestra una relación, no que abrir la vista cause más reportes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun LineCongestionBqCard(rows: List<CongestionRow>) {

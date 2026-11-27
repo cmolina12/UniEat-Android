@@ -1,5 +1,9 @@
 package co.edu.uniandes.unieat.ui.performance
 
+import co.edu.uniandes.unieat.core.model.AdminDashboardResponse
+import co.edu.uniandes.unieat.core.model.ReportFollowUpGroup
+import co.edu.uniandes.unieat.core.model.ReportFollowUpGroups
+import co.edu.uniandes.unieat.core.model.ReportFollowUpSnapshot
 import co.edu.uniandes.unieat.core.model.BatchResponse
 import co.edu.uniandes.unieat.core.model.CompletenessGroup
 import co.edu.uniandes.unieat.core.model.CompletenessGroups
@@ -304,6 +308,36 @@ class PerformanceViewModelTest {
     }
 
     @Test
+    fun adminGetsBq05AndBq17FromOneDashboardRequest() = runTest(dispatcher) {
+        val calls = mutableListOf<Int>()
+        val analytics = object : AnalyticsRepository by StubAnalytics(onPerformance = { summary(it) }) {
+            override suspend fun adminDashboard(days: Int): AdminDashboardResponse {
+                calls += days
+                return AdminDashboardResponse(bq05 = guidance(days), bq17 = followUp(days))
+            }
+        }
+        val vm = viewModelFor(analytics, role = "admin", showLocationGuidance = true)
+        advanceUntilIdle()
+
+        val content = vm.state.value as PerformanceUiState.Content
+        assertEquals(listOf(7), calls)
+        assertEquals(guidance(7), content.locationGuidance)
+        assertEquals(followUp(7), content.reportFollowUp)
+    }
+
+    @Test
+    fun bq17IsKeptInTheOfflineCopy() = runTest(dispatcher) {
+        val snapshots = MemorySnapshots()
+        val analytics = object : AnalyticsRepository by StubAnalytics(onPerformance = { summary(it) }) {
+            override suspend fun adminDashboard(days: Int) = AdminDashboardResponse(bq17 = followUp(days))
+        }
+        viewModelFor(analytics, role = "admin", showLocationGuidance = true, snapshots = snapshots)
+        advanceUntilIdle()
+
+        assertEquals(followUp(7), snapshots.load("admin", 7)?.reportFollowUp)
+    }
+
+    @Test
     fun theCardsAreRequestedInParallelNotOneAfterTheOther() = runTest(dispatcher) {
         val analytics = StubAnalytics(
             onLocation = { delay(1_000); guidance(it) },
@@ -416,6 +450,12 @@ class PerformanceViewModelTest {
     }
 
     private val now = Instant.parse("2026-10-27T20:00:00Z")
+
+    private fun followUp(days: Int) = ReportFollowUpSnapshot(
+        periodDays = days,
+        opens = 3,
+        groups = ReportFollowUpGroups(opened = ReportFollowUpGroup(students = 2, reports = 5, repeatStudents = 1, repeatShare = 0.5)),
+    )
 
     private fun viewModelFor(
         repository: AnalyticsRepository,

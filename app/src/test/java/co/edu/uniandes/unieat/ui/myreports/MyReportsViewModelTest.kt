@@ -246,6 +246,22 @@ class MyReportsViewModelTest {
     }
 
     @Test
+    fun onlyTheFirstLoadCountsAsAnOpenForBq17() = runTest(dispatcher) {
+        val online = MutableStateFlow(false)
+        val repo = Repo(error = ApiException.OFFLINE)
+        val vm = MyReportsViewModel(repo, online = online, io = dispatcher)
+        advanceUntilIdle()
+
+        repo.error = null
+        online.value = true // reload on reconnect
+        advanceUntilIdle()
+        vm.load() // Reintentar
+        advanceUntilIdle()
+
+        assertEquals(listOf(true, false, false), repo.openedFlags)
+    }
+
+    @Test
     fun theDetailListsTheReportsOfOnePlace() = runTest(dispatcher) {
         val vm = ReportedPlaceViewModel("a", Repo(places = listOf(place("a", total = 1))))
         advanceUntilIdle()
@@ -283,8 +299,11 @@ class MyReportsViewModelTest {
         var calls = 0
         var placeCalls = 0
 
-        override suspend fun places(): ReportedPlacesResponse {
+        val openedFlags = mutableListOf<Boolean>()
+
+        override suspend fun places(opened: Boolean): ReportedPlacesResponse {
             calls++
+            openedFlags += opened
             error?.let { throw ApiException(ApiError(it, "falló")) }
             return ReportedPlacesResponse(now, places)
         }

@@ -73,7 +73,7 @@ class MyReportsViewModel(
     private var prefetchJob: Job? = null
 
     init {
-        load()
+        load(opened = true)
         // signal back: reload on its own, no need to tap Reintentar
         if (online != null) viewModelScope.launch {
             online.drop(1).filter { it }.collect { if (_state.value.offline || _state.value.error != null) load() }
@@ -88,14 +88,15 @@ class MyReportsViewModel(
         }
     }
 
-    fun load() {
+    /** [opened] only for the first load: BQ-17 counts opens of the screen, not reloads or retries. */
+    fun load(opened: Boolean = false) {
         loadJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
         loadJob = viewModelScope.launch { // Main: only here is the state changed
             // the phone's copy first, so the list is there while the request runs
             if (_state.value.places.isEmpty()) showSaved()
             try {
-                val response = withContext(io) { repository.places() }
+                val response = withContext(io) { repository.places(opened) }
                 // back on Main: the list shows now, it doesn't wait for the work below
                 _state.update {
                     it.copy(

@@ -7,8 +7,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
+import co.edu.uniandes.unieat.core.model.AdminDashboardResponse
 import co.edu.uniandes.unieat.core.model.LocationCompletenessSnapshot
 import co.edu.uniandes.unieat.core.model.LocationGuidanceSnapshot
+import co.edu.uniandes.unieat.core.model.ReportFollowUpSnapshot
 import co.edu.uniandes.unieat.core.model.PerformanceSummary
 import co.edu.uniandes.unieat.data.analytics.AnalyticsRepository
 import co.edu.uniandes.unieat.data.pilot.CachePilotReport
@@ -55,6 +57,8 @@ sealed interface PerformanceUiState {
         val lineCongestion: List<CongestionRow>? = null,
         /** BQ-02 (Samuel): crashes per 1,000 sessions by screen and action; admins only, null if it fails. */
         val crashReport: CrashReport? = null,
+        /** BQ-17 (Camilo): do students who open Mis reportes report more? Admins only. */
+        val reportFollowUp: ReportFollowUpSnapshot? = null,
     ) : PerformanceUiState
 
     /** FORBIDDEN: metrics belong to restaurant or admin accounts. */
@@ -149,7 +153,11 @@ class PerformanceViewModel(
                 val content = withContext(io) {
                     val summary = async { if (restaurant) repository.restaurantPerformance(days) else repository.performance(days) }
                     val feedLoad = async { if (role == ROLE_ADMIN) feedLoadReport() else null }
-                    val guidance = async { locationGuidance(days, restaurant) }
+                    // admin: one GET /admin/dashboard brings BQ-05 and BQ-17 (Camilo), not one request each
+                    val dashboard = async { if (role == ROLE_ADMIN) adminDashboard(days) else null }
+                    val guidance = async {
+                        if (role == ROLE_ADMIN) dashboard.await()?.bq05 else locationGuidance(days, restaurant)
+                    }
                     val completeness = async { locationCompleteness(days) }
                     // BQ-13 (Samuel): a fifth child coroutine on IO, in parallel with the other four.
                     val pilot = async { if (role == ROLE_ADMIN) cachePilotReport(days) else null }
@@ -171,6 +179,7 @@ class PerformanceViewModel(
                         cachePilot = pilot.await(),
                         lineCongestion = congestion.await(),
                         crashReport = crash.await(),
+                        reportFollowUp = dashboard.await()?.bq17,
                     )
                 }
                 byPeriod.put(days, content)
@@ -198,6 +207,7 @@ class PerformanceViewModel(
                     ownEstablishmentsOnly = content.ownEstablishmentsOnly,
                     locationGuidance = content.locationGuidance, locationCompleteness = content.locationCompleteness,
                     cachePilot = content.cachePilot,
+                    reportFollowUp = content.reportFollowUp,
                 ),
             )
         }
@@ -209,6 +219,7 @@ class PerformanceViewModel(
             saved.summary, saved.feedLoadReport, saved.ownEstablishmentsOnly,
             saved.locationGuidance, saved.locationCompleteness, savedAt = saved.savedAt,
             cachePilot = saved.cachePilot,
+            reportFollowUp = saved.reportFollowUp,
         )
     }
 
@@ -221,6 +232,11 @@ class PerformanceViewModel(
     /** BQ-02: admin only, like BQ-01, and always 7 days (the question asks for the last seven days). */
     private suspend fun crashReport(): CrashReport? =
         crashes?.let { runCatching { it.summary(BQ01_DAYS) }.getOrNull() }
+
+    private suspend fun adminDashboard(days: Int): AdminDashboardResponse? {
+        if (!showLocationGuidance) return null
+        return runCatching { repository.adminDashboard(days) }.getOrNull()
+    }
 
     private suspend fun locationGuidance(days: Int, restaurant: Boolean): LocationGuidanceSnapshot? {
         if (!showLocationGuidance) return null
