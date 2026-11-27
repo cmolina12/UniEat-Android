@@ -154,6 +154,8 @@ internal class InMemoryReportDao : PendingReportDao {
 
     override fun countFor(publicationId: String): Flow<Int> = rows.map { list -> list.count { it.publicationId == publicationId } }
 
+    override fun all(): Flow<List<PendingReport>> = rows.map { list -> list.sortedByDescending { it.createdAtMillis } }
+
     override suspend fun clear() {
         rows.value = emptyList()
     }

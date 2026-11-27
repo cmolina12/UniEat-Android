@@ -12,7 +12,11 @@ import co.edu.uniandes.unieat.core.model.ReportedPlace
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.remote.ApiException
+import co.edu.uniandes.unieat.data.local.PendingReport
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +35,10 @@ data class MyReportsUiState(
     val sessionExpired: Boolean = false,
     /** set while the rows come from the phone (Room) instead of a fresh answer */
     val savedAt: Instant? = null,
+    /** the last request failed for lack of signal; the screen explains it instead of showing an error */
+    val offline: Boolean = false,
+    /** reports made without signal, still in the Room queue */
+    val unsent: List<PendingReport> = emptyList(),
 ) {
     val visible: List<ReportedPlace> get() = places.filter(filter::matches)
     val totalReports: Int get() = places.sumOf { it.total }
@@ -43,6 +51,8 @@ data class MyReportsUiState(
 class MyReportsViewModel(
     private val repository: MyReportsRepository,
     private val store: ReportHistoryStore? = null,
+    online: Flow<Boolean>? = null,
+    unsent: Flow<List<PendingReport>>? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MyReportsUiState())
     val state: StateFlow<MyReportsUiState> = _state.asStateFlow()
@@ -51,6 +61,18 @@ class MyReportsViewModel(
 
     init {
         load()
+        // signal back: reload on its own, no need to tap Reintentar
+        if (online != null) viewModelScope.launch {
+            online.drop(1).filter { it }.collect { if (_state.value.offline || _state.value.error != null) load() }
+        }
+        // the queue went out (fewer unsent): those reports are on the server now, ask again
+        if (unsent != null) viewModelScope.launch {
+            unsent.collect { rows ->
+                val sentSome = rows.size < _state.value.unsent.size
+                _state.update { it.copy(unsent = rows) }
+                if (sentSome) load()
+            }
+        }
     }
 
     fun load() {
@@ -63,14 +85,18 @@ class MyReportsViewModel(
                 val response = repository.places()
                 _state.update {
                     it.copy(
-                        loading = false, places = response.places, serverNow = response.serverNow, error = null, savedAt = null,
+                        loading = false, places = response.places, serverNow = response.serverNow, error = null,
+                        savedAt = null, offline = false,
                     )
                 }
                 store?.savePlaces(response.places)
             } catch (e: ApiException) {
                 _state.update {
-                    if (e.code == ApiException.AUTH_REQUIRED) it.copy(loading = false, sessionExpired = true)
-                    else it.copy(loading = false, error = e.error.message)
+                    when (e.code) {
+                        ApiException.AUTH_REQUIRED -> it.copy(loading = false, sessionExpired = true)
+                        ApiException.OFFLINE -> it.copy(loading = false, offline = true)
+                        else -> it.copy(loading = false, error = e.error.message)
+                    }
                 }
             }
         }
@@ -89,7 +115,12 @@ class MyReportsViewModel(
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                MyReportsViewModel(app.container.myReportsRepository, app.container.reportHistory)
+                MyReportsViewModel(
+                    app.container.myReportsRepository,
+                    app.container.reportHistory,
+                    app.container.connectivity.online,
+                    app.container.reportQueue.unsent(),
+                )
             }
         }
     }

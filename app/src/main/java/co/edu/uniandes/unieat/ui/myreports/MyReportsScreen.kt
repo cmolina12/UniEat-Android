@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.core.model.ReportFilter
 import co.edu.uniandes.unieat.core.model.ReportedPlace
+import co.edu.uniandes.unieat.data.local.PendingReport
+import co.edu.uniandes.unieat.ui.detail.reportChoices
 import co.edu.uniandes.unieat.ui.common.SpanishPresentation
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
@@ -73,7 +76,8 @@ fun MyReportsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        state.savedAt?.let { item { SavedNotice(it, state.loading) } }
+        state.savedAt?.let { item { SavedNotice(it, state.loading, state.offline) } }
+        if (state.unsent.isNotEmpty()) item { UnsentSection(state.unsent) }
         if (state.places.isNotEmpty()) item { Summary(state.totalReports, state.totalConfirmed) }
         item { FilterChips(state, vm::selectFilter) }
         state.error?.let { message ->
@@ -86,7 +90,14 @@ fun MyReportsScreen(
         }
         when {
             state.loading && state.places.isEmpty() -> item { Loading("Cargando tus reportes…") }
-            state.places.isEmpty() && state.error == null -> item {
+            state.offline && state.places.isEmpty() -> item {
+                EmptyCard(
+                    "Sin conexión",
+                    "Aún no hay una copia de tus reportes en este teléfono: ábrelos una vez con señal y quedarán " +
+                        "guardados. La lista se carga sola cuando vuelva la señal.",
+                )
+            }
+            state.places.isEmpty() && state.error == null && state.unsent.isEmpty() -> item {
                 EmptyCard(
                     "Aún no tienes reportes",
                     "Abre un menú y toca \"Reportar un cambio\" para avisar de algo. Aquí verás en qué quedó.",
@@ -114,17 +125,54 @@ internal fun ScreenHeader(title: String, onBack: () -> Unit, subtitle: String = 
 
 /** Rows from the phone: says when they were saved, and whether a fresh copy is on its way. */
 @Composable
-internal fun SavedNotice(savedAt: Instant, refreshing: Boolean) {
+internal fun SavedNotice(savedAt: Instant, refreshing: Boolean, offline: Boolean) {
     val time = SpanishPresentation.dateAndTime(savedAt)
-    DemoNotice(if (refreshing) "Actualizando… · mientras tanto, copia guardada el $time" else "Copia guardada el $time")
+    DemoNotice(
+        when {
+            offline -> "Sin conexión · copia guardada el $time · se actualiza sola cuando vuelva la señal"
+            refreshing -> "Actualizando… · mientras tanto, copia guardada el $time"
+            else -> "Copia guardada el $time"
+        },
+    )
+}
+
+/** Reports made without signal: they are on the phone and go out on their own when the signal returns. */
+@Composable
+private fun UnsentSection(unsent: List<PendingReport>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Por enviar (${unsent.size})", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+        unsent.forEach { report ->
+            val choice = reportChoices.firstOrNull { it.first == report.kind }
+            SurfaceCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    choice?.let { Icon(it.third, contentDescription = null, tint = Palette.Ink) }
+                    Text(choice?.second ?: "Reporte", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+                }
+                report.note?.takeIf { it.isNotBlank() }?.let { Text("“$it”", fontSize = 13.sp, fontStyle = FontStyle.Italic) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Sticker("Pendiente de enviar", color = Palette.Yellow) }
+                    Text(
+                        SpanishPresentation.dateAndTime(Instant.ofEpochMilli(report.createdAtMillis)),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text(
+            "Se envían solos cuando vuelva la conexión.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable
 private fun Summary(reports: Int, confirmed: Int) {
     SurfaceCard(Modifier.fillMaxWidth()) {
         Row {
-            Text("$reports reportes", Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
-            Text("$confirmed confirmados", fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+            Text(count(reports, "reporte"), Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
+            Text(count(confirmed, "confirmado"), fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
         }
     }
 }
@@ -166,8 +214,8 @@ private fun PlaceRow(place: ReportedPlace, onOpen: () -> Unit) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Sticker("${place.total} en total", color = Palette.Paper)
                 if (place.pending > 0) Sticker("${place.pending} en revisión", color = Palette.Yellow)
-                if (place.confirmed > 0) Sticker("${place.confirmed} confirmados", color = Palette.Green)
-                if (place.dismissed > 0) Sticker("${place.dismissed} descartados", color = Palette.Coral)
+                if (place.confirmed > 0) Sticker(count(place.confirmed, "confirmado"), color = Palette.Green)
+                if (place.dismissed > 0) Sticker(count(place.dismissed, "descartado"), color = Palette.Coral)
             }
         }
     }

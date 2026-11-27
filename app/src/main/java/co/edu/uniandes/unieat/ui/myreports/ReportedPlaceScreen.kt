@@ -54,11 +54,20 @@ fun ReportedPlaceScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { ScreenHeader(place?.name ?: name, onBack, subtitle = place?.area ?: area) }
-        state.savedAt?.let { item { SavedNotice(it, state.loading) } }
+        state.savedAt?.let { item { SavedNotice(it, state.loading, state.offline) } }
+        if (state.offline && state.reports.isEmpty()) {
+            item {
+                EmptyCard(
+                    "Sin conexión",
+                    "Este restaurante no se ha abierto con señal en este teléfono, así que no hay copia de sus " +
+                        "reportes. Se cargan solos cuando vuelva la señal.",
+                )
+            }
+        }
         if (place != null) {
             item {
                 Text(
-                    "${place.total} reportes · ${place.confirmed} confirmados · ${place.pending} en revisión",
+                    "${count(place.total, "reporte")} · ${count(place.confirmed, "confirmado")} · ${place.pending} en revisión",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
