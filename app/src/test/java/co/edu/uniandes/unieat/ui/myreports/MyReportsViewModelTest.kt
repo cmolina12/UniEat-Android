@@ -6,6 +6,7 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.core.model.ReportedPlace
 import co.edu.uniandes.unieat.core.model.ReportedPlaceResponse
 import co.edu.uniandes.unieat.core.model.ReportedPlacesResponse
+import co.edu.uniandes.unieat.data.local.PendingReport
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStoreTest
@@ -13,6 +14,7 @@ import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -127,6 +129,48 @@ class MyReportsViewModelTest {
     }
 
     @Test
+    fun withoutSignalItExplainsInsteadOfShowingAnError() = runTest(dispatcher) {
+        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE))
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.offline)
+        assertNull(vm.state.value.error)
+    }
+
+    @Test
+    fun whenTheSignalReturnsItReloadsOnItsOwn() = runTest(dispatcher) {
+        val online = MutableStateFlow(false)
+        val repo = Repo(error = ApiException.OFFLINE, places = listOf(place("a", pending = 1)))
+        val vm = MyReportsViewModel(repo, online = online)
+        advanceUntilIdle()
+        assertTrue(vm.state.value.offline)
+
+        repo.error = null
+        online.value = true
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.offline)
+        assertEquals(listOf("a"), vm.state.value.places.map { it.establishmentId })
+        assertEquals(2, repo.calls)
+    }
+
+    @Test
+    fun whenTheQueueSendsAReportTheListIsAskedAgain() = runTest(dispatcher) {
+        val queued = PendingReport(1, "p", 1, ReportKind.NOT_FOUND, "no lo vi", null, now.toEpochMilli())
+        val unsent = MutableStateFlow(listOf(queued))
+        val repo = Repo()
+        val vm = MyReportsViewModel(repo, unsent = unsent)
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.unsent.size)
+
+        unsent.value = emptyList()
+        advanceUntilIdle()
+
+        assertEquals(0, vm.state.value.unsent.size)
+        assertEquals(2, repo.calls)
+    }
+
+    @Test
     fun theDetailListsTheReportsOfOnePlace() = runTest(dispatcher) {
         val vm = ReportedPlaceViewModel("a", Repo(places = listOf(place("a", total = 1))))
         advanceUntilIdle()
@@ -156,7 +200,7 @@ class MyReportsViewModelTest {
     )
 
     private inner class Repo(
-        private val places: List<ReportedPlace> = emptyList(),
+        val places: List<ReportedPlace> = emptyList(),
         var error: String? = null,
     ) : MyReportsRepository {
         var calls = 0

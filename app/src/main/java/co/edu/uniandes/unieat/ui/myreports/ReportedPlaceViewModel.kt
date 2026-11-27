@@ -13,6 +13,9 @@ import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +32,7 @@ data class ReportedPlaceUiState(
     val sessionExpired: Boolean = false,
     /** set while the reports come from the phone (Room) */
     val savedAt: Instant? = null,
+    val offline: Boolean = false,
 )
 
 /** One place of Mis reportes: every report the student sent there, newest first. */
@@ -36,6 +40,7 @@ class ReportedPlaceViewModel(
     private val establishmentId: String,
     private val repository: MyReportsRepository,
     private val store: ReportHistoryStore? = null,
+    online: Flow<Boolean>? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReportedPlaceUiState())
     val state: StateFlow<ReportedPlaceUiState> = _state.asStateFlow()
@@ -44,6 +49,9 @@ class ReportedPlaceViewModel(
 
     init {
         load()
+        if (online != null) viewModelScope.launch {
+            online.drop(1).filter { it }.collect { if (_state.value.offline || _state.value.error != null) load() }
+        }
     }
 
     fun load() {
@@ -58,13 +66,19 @@ class ReportedPlaceViewModel(
             try {
                 val response = repository.place(establishmentId)
                 _state.update {
-                    it.copy(loading = false, place = response.place, reports = response.reports, error = null, savedAt = null)
+                    it.copy(
+                        loading = false, place = response.place, reports = response.reports, error = null,
+                        savedAt = null, offline = false,
+                    )
                 }
                 store?.savePlace(response.place, response.reports)
             } catch (e: ApiException) {
                 _state.update {
-                    if (e.code == ApiException.AUTH_REQUIRED) it.copy(loading = false, sessionExpired = true)
-                    else it.copy(loading = false, error = e.error.message)
+                    when (e.code) {
+                        ApiException.AUTH_REQUIRED -> it.copy(loading = false, sessionExpired = true)
+                        ApiException.OFFLINE -> it.copy(loading = false, offline = true)
+                        else -> it.copy(loading = false, error = e.error.message)
+                    }
                 }
             }
         }
@@ -74,7 +88,12 @@ class ReportedPlaceViewModel(
         fun factory(establishmentId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
-                ReportedPlaceViewModel(establishmentId, app.container.myReportsRepository, app.container.reportHistory)
+                ReportedPlaceViewModel(
+                    establishmentId,
+                    app.container.myReportsRepository,
+                    app.container.reportHistory,
+                    app.container.connectivity.online,
+                )
             }
         }
     }

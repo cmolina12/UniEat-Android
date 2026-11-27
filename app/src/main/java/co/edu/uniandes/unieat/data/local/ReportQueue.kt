@@ -31,6 +31,9 @@ class ReportQueue(
 
     fun pendingFor(publicationId: String): Flow<Int> = dao.countFor(publicationId)
 
+    /** Reports still on the phone, for the "Por enviar" section of Mis reportes. */
+    fun unsent(): Flow<List<PendingReport>> = dao.all()
+
     /**
      * Sends everything waiting. Stops at the first one worth retrying later (no internet, session,
      * rate limit, server error) to keep the order. Drops the ones the server will never accept.

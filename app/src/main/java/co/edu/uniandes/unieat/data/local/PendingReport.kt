@@ -65,6 +65,10 @@ interface PendingReportDao {
     @Query("SELECT COUNT(*) FROM pending_reports WHERE publicationId = :publicationId")
     fun countFor(publicationId: String): Flow<Int>
 
+    /** Mis reportes, "Por enviar": everything still waiting for signal, newest first. */
+    @Query("SELECT * FROM pending_reports ORDER BY createdAtMillis DESC")
+    fun all(): Flow<List<PendingReport>>
+
     @Query("DELETE FROM pending_reports")
     suspend fun clear()
 }

@@ -9,6 +9,9 @@ import co.edu.uniandes.unieat.core.model.ReportKind
 import co.edu.uniandes.unieat.ui.detail.reportChoices
 import co.edu.uniandes.unieat.ui.theme.Palette
 
+/** "1 reporte", "2 reportes": the counts here are often 1. */
+internal fun count(n: Int, singular: String, plural: String = singular + "s"): String = "$n ${if (n == 1) singular else plural}"
+
 /** The server sends the kind as its wire name ("not_found"); find the enum by its @SerialName. */
 internal fun reportKindOf(wire: String): ReportKind? {
     val descriptor = ReportKind.serializer().descriptor
