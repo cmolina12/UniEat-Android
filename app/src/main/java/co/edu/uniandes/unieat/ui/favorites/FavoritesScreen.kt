@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.uniandes.unieat.ui.theme.BrandHeader
 import co.edu.uniandes.unieat.ui.theme.DemoNotice
+import co.edu.uniandes.unieat.ui.theme.FoodArtwork
 import co.edu.uniandes.unieat.ui.theme.Palette
 import co.edu.uniandes.unieat.ui.theme.Sticker
 import co.edu.uniandes.unieat.ui.theme.SurfaceCard
@@ -76,6 +77,7 @@ private fun FavoriteCard(row: FavoriteRow, menusUnknown: Boolean, onOpenMenu: (S
             .fillMaxWidth()
             .then(if (menu != null) Modifier.clickable { onOpenMenu(menu.id) } else Modifier),
     ) {
+        if (menu != null) FoodArtwork(row.favorite.name, menu.photoUrl, height = 120.dp)
         Text(row.favorite.name, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Ink)
         Sticker(row.favorite.area, color = Palette.Cyan, icon = Icons.Filled.Place)
         Text(
