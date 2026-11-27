@@ -9,11 +9,17 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import co.edu.uniandes.unieat.UniEatApplication
 import co.edu.uniandes.unieat.core.model.ReportFilter
 import co.edu.uniandes.unieat.core.model.ReportedPlace
+import co.edu.uniandes.unieat.core.model.ReportedPlaceResponse
+import co.edu.uniandes.unieat.data.local.PendingReport
 import co.edu.uniandes.unieat.data.myreports.MyReportsRepository
 import co.edu.uniandes.unieat.data.myreports.ReportHistoryStore
+import co.edu.uniandes.unieat.data.myreports.ReportedPlaceCache
 import co.edu.uniandes.unieat.data.remote.ApiException
-import co.edu.uniandes.unieat.data.local.PendingReport
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -22,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 
 /** Everything the "Mis reportes" list can show. The filter only hides rows, it never asks the server again. */
@@ -53,11 +60,17 @@ class MyReportsViewModel(
     private val store: ReportHistoryStore? = null,
     online: Flow<Boolean>? = null,
     unsent: Flow<List<PendingReport>>? = null,
+    private val cache: ReportedPlaceCache? = null,
+    /** Tests pass their own dispatcher. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MyReportsUiState())
     val state: StateFlow<MyReportsUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+
+    /** Background work after a load; cancelled by the next load so two never write at once. */
+    private var prefetchJob: Job? = null
 
     init {
         load()
@@ -78,18 +91,19 @@ class MyReportsViewModel(
     fun load() {
         loadJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
-        loadJob = viewModelScope.launch {
+        loadJob = viewModelScope.launch { // Main: only here is the state changed
             // the phone's copy first, so the list is there while the request runs
             if (_state.value.places.isEmpty()) showSaved()
             try {
-                val response = repository.places()
+                val response = withContext(io) { repository.places() }
+                // back on Main: the list shows now, it doesn't wait for the work below
                 _state.update {
                     it.copy(
                         loading = false, places = response.places, serverNow = response.serverNow, error = null,
                         savedAt = null, offline = false,
                     )
                 }
-                store?.savePlaces(response.places)
+                afterLoad(response.places)
             } catch (e: ApiException) {
                 _state.update {
                     when (e.code) {
@@ -102,6 +116,33 @@ class MyReportsViewModel(
         }
     }
 
+    /**
+     * IO, in parallel: save the list in Room and fetch the first [PREFETCH] places at the same time, one
+     * `async` each. Opening those places is then instant (LRU), and they also open without signal (Room).
+     * A place that fails is skipped; the others go on.
+     */
+    private fun afterLoad(places: List<ReportedPlace>) {
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch(io) {
+            launch { store?.savePlaces(places) }
+            val details = places.take(PREFETCH)
+                .filter { cache?.get(it.establishmentId) == null }
+                .map { place -> async { fetchQuietly(place.establishmentId) } }
+                .awaitAll()
+                .filterNotNull()
+            details.forEach { detail ->
+                cache?.put(detail)
+                store?.savePlace(detail.place, detail.reports)
+            }
+        }
+    }
+
+    private suspend fun fetchQuietly(establishmentId: String): ReportedPlaceResponse? = try {
+        repository.place(establishmentId)
+    } catch (_: ApiException) {
+        null
+    }
+
     private suspend fun showSaved() {
         val saved = store?.loadPlaces() ?: return
         _state.update { it.copy(places = saved.places, savedAt = saved.savedAt) }
@@ -112,6 +153,9 @@ class MyReportsViewModel(
     }
 
     companion object {
+        /** About the rows that fit on a phone screen; more would be requests for places nobody looks at. */
+        const val PREFETCH = 3
+
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as UniEatApplication
@@ -120,6 +164,7 @@ class MyReportsViewModel(
                     app.container.reportHistory,
                     app.container.connectivity.online,
                     app.container.reportQueue.unsent(),
+                    app.container.reportedPlaceCache,
                 )
             }
         }

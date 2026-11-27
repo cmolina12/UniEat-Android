@@ -15,15 +15,18 @@ import co.edu.uniandes.unieat.data.remote.ApiError
 import co.edu.uniandes.unieat.data.remote.ApiException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -41,7 +44,8 @@ class MyReportsViewModelTest {
 
     @Test
     fun loadsThePlacesAndTheTotals() = runTest(dispatcher) {
-        val vm = MyReportsViewModel(Repo(places = listOf(place("a", pending = 1, confirmed = 2), place("b", total = 1))))
+        val repo = Repo(places = listOf(place("a", pending = 1, confirmed = 2), place("b", total = 1)))
+        val vm = MyReportsViewModel(repo, io = dispatcher)
         advanceUntilIdle()
 
         val state = vm.state.value
@@ -54,7 +58,7 @@ class MyReportsViewModelTest {
     @Test
     fun theFilterOnlyHidesRowsAndTheChipsCountPlaces() = runTest(dispatcher) {
         val repo = Repo(places = listOf(place("a", pending = 1), place("b", confirmed = 1), place("c", total = 1)))
-        val vm = MyReportsViewModel(repo)
+        val vm = MyReportsViewModel(repo, io = dispatcher)
         advanceUntilIdle()
 
         vm.selectFilter(ReportFilter.IN_REVIEW)
@@ -69,7 +73,7 @@ class MyReportsViewModelTest {
 
     @Test
     fun anExpiredSessionIsReported() = runTest(dispatcher) {
-        val vm = MyReportsViewModel(Repo(error = ApiException.AUTH_REQUIRED))
+        val vm = MyReportsViewModel(Repo(error = ApiException.AUTH_REQUIRED), io = dispatcher)
         advanceUntilIdle()
 
         assertTrue(vm.state.value.sessionExpired)
@@ -78,7 +82,7 @@ class MyReportsViewModelTest {
     @Test
     fun anErrorKeepsItsMessageAndRetryClearsIt() = runTest(dispatcher) {
         val repo = Repo(error = ApiException.INTERNAL_ERROR)
-        val vm = MyReportsViewModel(repo)
+        val vm = MyReportsViewModel(repo, io = dispatcher)
         advanceUntilIdle()
         assertEquals("falló", vm.state.value.error)
 
@@ -91,10 +95,10 @@ class MyReportsViewModelTest {
     @Test
     fun withoutAnAnswerTheListComesFromThePhoneWithItsTime() = runTest(dispatcher) {
         val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
-        MyReportsViewModel(Repo(places = listOf(place("a", pending = 1))), store)
+        MyReportsViewModel(Repo(places = listOf(place("a", pending = 1))), store, io = dispatcher)
         advanceUntilIdle()
 
-        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE), store)
+        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE), store, io = dispatcher)
         advanceUntilIdle()
 
         assertEquals(listOf("a"), vm.state.value.places.map { it.establishmentId })
@@ -106,7 +110,7 @@ class MyReportsViewModelTest {
         val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
         store.savePlaces(listOf(place("old", pending = 1)))
 
-        val vm = MyReportsViewModel(Repo(places = listOf(place("new", confirmed = 1))), store)
+        val vm = MyReportsViewModel(Repo(places = listOf(place("new", confirmed = 1))), store, io = dispatcher)
         advanceUntilIdle()
 
         assertEquals(listOf("new"), vm.state.value.places.map { it.establishmentId })
@@ -131,7 +135,7 @@ class MyReportsViewModelTest {
 
     @Test
     fun withoutSignalItExplainsInsteadOfShowingAnError() = runTest(dispatcher) {
-        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE))
+        val vm = MyReportsViewModel(Repo(error = ApiException.OFFLINE), io = dispatcher)
         advanceUntilIdle()
 
         assertTrue(vm.state.value.offline)
@@ -142,7 +146,7 @@ class MyReportsViewModelTest {
     fun whenTheSignalReturnsItReloadsOnItsOwn() = runTest(dispatcher) {
         val online = MutableStateFlow(false)
         val repo = Repo(error = ApiException.OFFLINE, places = listOf(place("a", pending = 1)))
-        val vm = MyReportsViewModel(repo, online = online)
+        val vm = MyReportsViewModel(repo, online = online, io = dispatcher)
         advanceUntilIdle()
         assertTrue(vm.state.value.offline)
 
@@ -160,7 +164,7 @@ class MyReportsViewModelTest {
         val queued = PendingReport(1, "p", 1, ReportKind.NOT_FOUND, "no lo vi", null, now.toEpochMilli())
         val unsent = MutableStateFlow(listOf(queued))
         val repo = Repo()
-        val vm = MyReportsViewModel(repo, unsent = unsent)
+        val vm = MyReportsViewModel(repo, unsent = unsent, io = dispatcher)
         advanceUntilIdle()
         assertEquals(1, vm.state.value.unsent.size)
 
@@ -202,6 +206,46 @@ class MyReportsViewModelTest {
     }
 
     @Test
+    fun theFirstPlacesArePrefetchedInParallelOnIo() = runTest(dispatcher) {
+        val cache = ReportedPlaceCache { now }
+        val store = ReportHistoryStore(ReportHistoryStoreTest.MemoryDao(), dispatcher) { now }
+        val repo = Repo(places = listOf("a", "b", "c", "d").map { place(it, total = 1) }, placeDelayMs = 1_000)
+        MyReportsViewModel(repo, store, cache = cache, io = dispatcher)
+        advanceUntilIdle()
+
+        // three requests of 1 s each, at the same time: 1 s in total, not 3
+        assertEquals(1_000, currentTime)
+        assertEquals(3, repo.placeCalls)
+        assertEquals(3, cache.size)
+        assertNull(cache["d"])
+        // and they open without signal too
+        assertEquals(listOf("r-a"), store.loadPlace("a")!!.reports.map { it.id })
+    }
+
+    @Test
+    fun aPlaceAlreadyInTheCacheIsNotFetchedAgain() = runTest(dispatcher) {
+        val cache = ReportedPlaceCache { now }
+        val repo = Repo(places = listOf("a", "b").map { place(it, total = 1) })
+        cache.put(repo.place("a"))
+
+        MyReportsViewModel(repo, cache = cache, io = dispatcher)
+        advanceUntilIdle()
+
+        assertEquals(2, repo.placeCalls) // the put above and "b"
+    }
+
+    @Test
+    fun aPlaceThatFailsDoesNotStopTheOthers() = runTest(dispatcher) {
+        val cache = ReportedPlaceCache { now }
+        val repo = Repo(places = listOf("a", "b").map { place(it, total = 1) }, failingPlace = "a")
+        MyReportsViewModel(repo, cache = cache, io = dispatcher)
+        advanceUntilIdle()
+
+        assertNull(cache["a"])
+        assertNotNull(cache["b"])
+    }
+
+    @Test
     fun theDetailListsTheReportsOfOnePlace() = runTest(dispatcher) {
         val vm = ReportedPlaceViewModel("a", Repo(places = listOf(place("a", total = 1))))
         advanceUntilIdle()
@@ -233,6 +277,8 @@ class MyReportsViewModelTest {
     private inner class Repo(
         val places: List<ReportedPlace> = emptyList(),
         var error: String? = null,
+        private val placeDelayMs: Long = 0,
+        private val failingPlace: String? = null,
     ) : MyReportsRepository {
         var calls = 0
         var placeCalls = 0
@@ -245,7 +291,9 @@ class MyReportsViewModelTest {
 
         override suspend fun place(establishmentId: String): ReportedPlaceResponse {
             placeCalls++
+            delay(placeDelayMs)
             error?.let { throw ApiException(ApiError(it, "falló")) }
+            if (establishmentId == failingPlace) throw ApiException(ApiError(ApiException.INTERNAL_ERROR, "falló"))
             val place = places.first { it.establishmentId == establishmentId }
             return ReportedPlaceResponse(now, place, listOf(report("price").copy(id = "r-$establishmentId")))
         }
